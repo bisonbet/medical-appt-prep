@@ -10,7 +10,7 @@ to ask your doctor, and relevant background information.
 
 ## Features
 
-- Gradio web UI (runs in your browser)
+- Gradio 6 web UI (runs in your browser)
 - Two LLM backend options: **Ollama** (recommended) or **llama-cpp-python**
 - Targets medical-focused models: MedGemma, MediPhi
 - Works on Windows, macOS, and Linux

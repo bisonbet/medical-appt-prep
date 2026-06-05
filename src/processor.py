@@ -27,17 +27,17 @@ def validate_inputs(
     errors: list[str] = []
 
     if not symptoms or not symptoms.strip():
-        errors.append("⚠️ Please describe your symptoms before generating a report.")
+        errors.append("Please describe your symptoms before generating a report.")
     elif len(symptoms.strip()) < MIN_SYMPTOM_LENGTH:
         errors.append(
-            f"⚠️ Symptom description is too short (minimum {MIN_SYMPTOM_LENGTH} characters). "
+            f"Symptom description is too short (minimum {MIN_SYMPTOM_LENGTH} characters). "
             "Please provide more detail."
         )
 
     for label, value in [("Symptoms", symptoms), ("Notes", notes), ("Medications", medications)]:
         if value and len(value) > MAX_FIELD_LENGTH:
             errors.append(
-                f"⚠️ {label} field exceeds the maximum length of {MAX_FIELD_LENGTH} characters. "
+                f"{label} field exceeds the maximum length of {MAX_FIELD_LENGTH} characters. "
                 "Please shorten your input."
             )
 
