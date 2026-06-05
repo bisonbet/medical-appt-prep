@@ -1,0 +1,14 @@
+# Core
+gradio>=4.29.0
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+
+# LLM backends (install the one you need)
+# Ollama uses its own REST API — no Python package required.
+# For llama-cpp-python, uncomment the line below:
+# llama-cpp-python>=0.2.77
+
+# Optional: GPU-accelerated llama-cpp-python build
+# See https://github.com/abetlen/llama-cpp-python#installation-with-specific-hardware-acceleration
+# CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python   # NVIDIA CUDA
+# CMAKE_ARGS="-DGGML_METAL=on" pip install llama-cpp-python  # Apple Metal (M-series)

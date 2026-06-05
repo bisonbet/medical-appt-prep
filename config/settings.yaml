@@ -1,0 +1,27 @@
+# Medical Appointment Prep Assistant — Configuration
+# Edit this file to configure the model backend and server settings.
+# Restart the app after making changes.
+
+model:
+  # Backend: "ollama" (recommended) or "llama_cpp"
+  backend: ollama
+
+  # --- Ollama settings ---
+  # Model name as shown by `ollama list`
+  # Recommended: medgemma (Google), or medphi when available
+  name: medgemma
+  ollama_base_url: http://localhost:11434
+
+  # --- llama-cpp-python settings ---
+  # Uncomment and set this if using backend: llama_cpp
+  # model_path: /path/to/your/model.gguf
+  # n_gpu_layers: 0  # Set > 0 to offload layers to GPU (requires GPU build)
+
+  # --- Shared settings ---
+  context_length: 4096   # Max tokens in context window
+  temperature: 0.3       # Lower = more deterministic, higher = more creative
+  max_new_tokens: 1024   # Max tokens to generate per response
+
+server:
+  host: 127.0.0.1  # Use 0.0.0.0 to allow LAN access
+  port: 7860
