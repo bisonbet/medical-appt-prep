@@ -11,6 +11,7 @@ from src.prompts import (
     build_relevant_info_prompt,
 )
 from src.processor import validate_inputs, parse_output
+from src.medications import load_medication_choices, medication_index_summary
 from config_loader import load_settings
 
 settings = load_settings()
@@ -108,12 +109,37 @@ def run_inference(symptoms: str, notes: str, medications: str):
     return timeline, questions, relevant
 
 
+def add_medication_entry(medication_name: str, instructions: str, current_medications: str):
+    """Append a selected or custom medication line to the medication list."""
+    medication_name = (medication_name or "").strip()
+    instructions = (instructions or "").strip()
+    current_medications = (current_medications or "").strip()
+
+    if not medication_name and not instructions:
+        return current_medications, "", "", None
+
+    if medication_name and instructions:
+        entry = f"{medication_name} - {instructions}"
+    else:
+        entry = medication_name or instructions
+
+    updated = f"{current_medications}\n{entry}".strip() if current_medications else entry
+    return updated, "", "", None
+
+
+def populate_medication_name(selected_medication: str, current_name: str):
+    """Copy a selected RxTerms choice into the editable medication-name field."""
+    return (selected_medication or current_name or "").strip()
+
+
 def create_ui() -> gr.Blocks:
     model_cfg = settings.get("model", {})
     backend = model_cfg.get("backend", "ollama")
     model_name = model_cfg.get("name", "medgemma1.5")
     context_length = model_cfg.get("context_length", 4096)
     temperature = model_cfg.get("temperature", 0.3)
+    medication_choices = load_medication_choices()
+    medication_summary = medication_index_summary()
 
     with gr.Blocks(
         title="Medical Appointment Prep Assistant",
@@ -176,10 +202,43 @@ def create_ui() -> gr.Blocks:
                         elem_classes=["apple-input"],
                     )
                     gr.HTML('<p class="input-label">Current Medications</p>')
+                    gr.HTML(f'<p class="fine-print medication-source">{medication_summary}</p>')
+                    medication_picker = gr.Dropdown(
+                        label="Find a Medication",
+                        show_label=False,
+                        choices=medication_choices,
+                        value=None,
+                        filterable=True,
+                        allow_custom_value=True,
+                        elem_classes=["apple-input", "medication-picker"],
+                    )
+                    gr.HTML('<p class="input-label">Medication Name</p>')
+                    medication_name = gr.Textbox(
+                        label="Medication Name",
+                        show_label=False,
+                        placeholder="Select from RxTerms above, or type a medication, vitamin, or supplement",
+                        lines=1,
+                        max_lines=2,
+                        elem_classes=["apple-input"],
+                    )
+                    gr.HTML('<p class="input-label">How You Take It</p>')
+                    medication_instructions = gr.Textbox(
+                        label="Medication Instructions",
+                        show_label=False,
+                        placeholder="How you take it, e.g. once daily, as needed, with food",
+                        lines=2,
+                        max_lines=4,
+                        elem_classes=["apple-input"],
+                    )
+                    add_medication_btn = gr.Button(
+                        "Add Medication",
+                        variant="secondary",
+                        elem_classes=["secondary-pill", "add-medication-button"],
+                    )
                     medications = gr.Textbox(
                         label="Current Medications",
                         show_label=False,
-                        placeholder="Lisinopril 10mg daily, Vitamin D 2000IU daily",
+                        placeholder="Selected medications will appear here. You can also edit this list directly.",
                         lines=4,
                         max_lines=8,
                         elem_classes=["apple-input"],
@@ -233,10 +292,32 @@ def create_ui() -> gr.Blocks:
                 api_name="generate",
                 api_visibility="public",
             )
+            medication_picker.change(
+                fn=populate_medication_name,
+                inputs=[medication_picker, medication_name],
+                outputs=[medication_name],
+                api_visibility="private",
+            )
+            add_medication_btn.click(
+                fn=add_medication_entry,
+                inputs=[medication_name, medication_instructions, medications],
+                outputs=[medications, medication_name, medication_instructions, medication_picker],
+                api_visibility="private",
+            )
             clear_btn.click(
-                fn=lambda: ("", "", "", DEFAULT_OUTPUT, DEFAULT_OUTPUT, DEFAULT_OUTPUT),
+                fn=lambda: ("", "", "", "", "", None, DEFAULT_OUTPUT, DEFAULT_OUTPUT, DEFAULT_OUTPUT),
                 inputs=[],
-                outputs=[symptoms, notes, medications, timeline_output, questions_output, relevant_output],
+                outputs=[
+                    symptoms,
+                    notes,
+                    medications,
+                    medication_name,
+                    medication_instructions,
+                    medication_picker,
+                    timeline_output,
+                    questions_output,
+                    relevant_output,
+                ],
                 api_visibility="private",
             )
 

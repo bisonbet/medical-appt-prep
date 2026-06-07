@@ -42,3 +42,6 @@ Thumbs.db
 # Gradio
 flagged/
 gradio_tmp/
+
+# Downloaded source archives for generated medication autocomplete data
+data/medications/*.zip

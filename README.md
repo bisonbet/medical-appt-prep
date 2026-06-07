@@ -13,6 +13,7 @@ to ask your doctor, and relevant background information.
 - Gradio 6 web UI (runs in your browser)
 - Two LLM backend options: **Ollama** (recommended) or **llama-cpp-python**
 - Defaults to MedGemma 1.5 via Ollama
+- Local RxTerms medication autocomplete with custom entry fallback
 - Works on Windows, macOS, and Linux
 
 ---
@@ -121,6 +122,23 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 
 ---
 
+## Medication Autocomplete
+
+Medication autocomplete uses a bundled RxTerms-derived JSON index at
+`data/medications/rxterms_medications.json`. This keeps medication entry local for
+desktop builds and Hugging Face Spaces. The app also allows custom medication,
+vitamin, and supplement entries when an item is not in the index.
+
+Refresh the RxTerms index with:
+
+```bash
+python scripts/sync_rxterms.py
+```
+
+The source ZIP download is ignored by git; the compact JSON index is committed.
+
+---
+
 ## Project Structure
 
 ```
@@ -129,8 +147,13 @@ medical-appt-prep/
 ├── config_loader.py     # Loads settings.yaml + .env overrides
 ├── config/
 │   └── settings.yaml    # Model and server configuration
+├── data/
+│   └── medications/     # Bundled RxTerms autocomplete index
+├── scripts/
+│   └── sync_rxterms.py  # Refreshes the local RxTerms index
 ├── src/
 │   ├── __init__.py
+│   ├── medications.py   # Medication autocomplete data helpers
 │   ├── model.py         # LLM backends (Ollama, llama-cpp-python)
 │   ├── prompts.py       # Prompt templates for each output type
 │   └── processor.py     # Input validation and output post-processing
