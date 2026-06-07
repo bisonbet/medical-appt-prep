@@ -8,8 +8,8 @@ model:
 
   # --- Ollama settings ---
   # Model name as shown by `ollama list`
-  # Recommended: medgemma (Google), or medphi when available
-  name: medgemma
+  # Recommended: medgemma1.5 (Google MedGemma 1.5 4B)
+  name: medgemma1.5
   ollama_base_url: http://localhost:11434
 
   # --- llama-cpp-python settings ---

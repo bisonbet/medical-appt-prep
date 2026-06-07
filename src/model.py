@@ -42,13 +42,12 @@ class OllamaModel(BaseLLM):
     Talks to a locally-running Ollama daemon via its REST API.
 
     Install Ollama: https://ollama.ai
-    Pull a model:  ollama pull medgemma
-                   ollama pull medphi   (if/when available)
+    Pull a model:  ollama pull medgemma1.5
     """
 
     def __init__(
         self,
-        model_name: str = "medgemma",
+        model_name: str = "medgemma1.5",
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
         context_length: int = 4096,
@@ -179,7 +178,7 @@ def get_model(settings: dict) -> BaseLLM:
 
     if backend == "ollama":
         return OllamaModel(
-            model_name=model_cfg.get("name", "medgemma"),
+            model_name=model_cfg.get("name", "medgemma1.5"),
             base_url=model_cfg.get("ollama_base_url", "http://localhost:11434"),
             temperature=float(model_cfg.get("temperature", 0.3)),
             context_length=int(model_cfg.get("context_length", 4096)),

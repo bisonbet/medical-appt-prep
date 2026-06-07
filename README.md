@@ -12,7 +12,7 @@ to ask your doctor, and relevant background information.
 
 - Gradio 6 web UI (runs in your browser)
 - Two LLM backend options: **Ollama** (recommended) or **llama-cpp-python**
-- Targets medical-focused models: MedGemma, MediPhi
+- Defaults to MedGemma 1.5 via Ollama
 - Works on Windows, macOS, and Linux
 
 ---
@@ -34,7 +34,7 @@ ollama serve
 
 Pull the model (in a new terminal):
 ```bash
-ollama pull medgemma
+ollama pull medgemma1.5
 ```
 
 ### 2. Clone and set up the project
@@ -112,7 +112,7 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 | Key | Default | Description |
 |-----|---------|-------------|
 | `model.backend` | `ollama` | `ollama` or `llama_cpp` |
-| `model.name` | `medgemma` | Ollama model name |
+| `model.name` | `medgemma1.5` | Ollama model name |
 | `model.ollama_base_url` | `http://localhost:11434` | Ollama API URL |
 | `model.model_path` | — | Path to `.gguf` file (llama_cpp only) |
 | `model.temperature` | `0.3` | Generation temperature |

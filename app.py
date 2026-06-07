@@ -19,6 +19,69 @@ settings = load_settings()
 DEFAULT_OUTPUT = "_Your prep report will appear here._"
 APPLE_CSS_PATH = "assets/apple.css"
 APPLE_THEME = gr.themes.Soft()
+THEME_MODE_HEAD = """
+<script>
+(() => {
+  const storageKey = "medical-appt-prep-theme";
+  const validModes = new Set(["system", "light", "dark"]);
+
+  function currentMode() {
+    const storedMode = localStorage.getItem(storageKey);
+    return validModes.has(storedMode) ? storedMode : "system";
+  }
+
+  function applyTheme(mode) {
+    const resolvedMode = validModes.has(mode) ? mode : "system";
+    document.documentElement.dataset.themeMode = resolvedMode;
+    if (resolvedMode === "system") {
+      document.documentElement.dataset.theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+      localStorage.removeItem(storageKey);
+    } else {
+      document.documentElement.dataset.theme = resolvedMode;
+      localStorage.setItem(storageKey, resolvedMode);
+    }
+
+    document.querySelectorAll("[data-theme-option]").forEach((button) => {
+      const isSelected = button.dataset.themeOption === resolvedMode;
+      button.classList.toggle("selected", isSelected);
+      button.setAttribute("aria-pressed", String(isSelected));
+    });
+  }
+
+  function bindThemeSelector() {
+    document.querySelectorAll("[data-theme-option]").forEach((button) => {
+      if (button.dataset.boundThemeSelector === "true") {
+        return;
+      }
+      button.dataset.boundThemeSelector = "true";
+      button.addEventListener("click", () => applyTheme(button.dataset.themeOption));
+    });
+    applyTheme(currentMode());
+  }
+
+  function startThemeMode() {
+    bindThemeSelector();
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if (currentMode() === "system") {
+        applyTheme("system");
+      }
+    });
+    new MutationObserver(bindThemeSelector).observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startThemeMode);
+  } else {
+    startThemeMode();
+  }
+})();
+</script>
+"""
 
 
 def run_inference(symptoms: str, notes: str, medications: str):
@@ -48,7 +111,7 @@ def run_inference(symptoms: str, notes: str, medications: str):
 def create_ui() -> gr.Blocks:
     model_cfg = settings.get("model", {})
     backend = model_cfg.get("backend", "ollama")
-    model_name = model_cfg.get("name", "medgemma")
+    model_name = model_cfg.get("name", "medgemma1.5")
     context_length = model_cfg.get("context_length", 4096)
     temperature = model_cfg.get("temperature", 0.3)
 
@@ -64,6 +127,11 @@ def create_ui() -> gr.Blocks:
                     <span class="nav-mark" aria-hidden="true"></span>
                     <span class="nav-title">Medical Appointment Prep</span>
                     <span class="nav-status">Local</span>
+                    <div class="theme-switcher" aria-label="Appearance">
+                        <button type="button" data-theme-option="system">System</button>
+                        <button type="button" data-theme-option="light">Light</button>
+                        <button type="button" data-theme-option="dark">Dark</button>
+                    </div>
                 </div>
             </header>
             <section class="hero-tile">
@@ -216,6 +284,7 @@ if __name__ == "__main__":
         server_port=settings.get("server", {}).get("port", 7860),
         theme=APPLE_THEME,
         css_paths=[APPLE_CSS_PATH],
+        head=THEME_MODE_HEAD,
         footer_links=["api"],
         share=False,
         inbrowser=True,
