@@ -9,10 +9,30 @@ Backends:
 from __future__ import annotations
 
 import abc
+import os
 import json
 import urllib.request
 import urllib.error
+from functools import lru_cache
 from typing import Any
+
+
+try:
+    import spaces  # type: ignore[import]
+except ImportError:
+    class _SpacesFallback:
+        @staticmethod
+        def GPU(*_args: Any, **_kwargs: Any):
+            def decorator(fn):
+                return fn
+
+            return decorator
+
+    spaces = _SpacesFallback()
+
+
+_HF_MODEL: Any | None = None
+_HF_PROCESSOR: Any | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +46,10 @@ class BaseLLM(abc.ABC):
     def generate(self, prompt: str) -> str:
         """Run inference and return the raw response string."""
         ...
+
+    def generate_report(self, prompt: str) -> str:
+        """Run one report-generation inference call."""
+        return self.generate(prompt)
 
     @abc.abstractmethod
     def health_check(self) -> bool:
@@ -51,12 +75,14 @@ class OllamaModel(BaseLLM):
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
         context_length: int = 4096,
+        max_new_tokens: int = 2048,
         system_prompt: str = "",
     ) -> None:
         self.model_name = model_name
         self.base_url = base_url.rstrip("/")
         self.temperature = temperature
         self.context_length = context_length
+        self.max_new_tokens = max_new_tokens
         self.system_prompt = system_prompt
 
     # ------------------------------------------------------------------
@@ -69,6 +95,7 @@ class OllamaModel(BaseLLM):
             "options": {
                 "temperature": self.temperature,
                 "num_ctx": self.context_length,
+                "num_predict": self.max_new_tokens,
             },
         }
         if self.system_prompt:
@@ -120,6 +147,7 @@ class LlamaCppModel(BaseLLM):
         model_path: str,
         temperature: float = 0.3,
         context_length: int = 4096,
+        max_new_tokens: int = 2048,
         n_gpu_layers: int = 0,
         system_prompt: str = "",
     ) -> None:
@@ -132,6 +160,7 @@ class LlamaCppModel(BaseLLM):
 
         self.temperature = temperature
         self.context_length = context_length
+        self.max_new_tokens = max_new_tokens
         self.system_prompt = system_prompt
         self._llm = Llama(
             model_path=model_path,
@@ -150,13 +179,166 @@ class LlamaCppModel(BaseLLM):
         response = self._llm.create_chat_completion(
             messages=messages,
             temperature=self.temperature,
-            max_tokens=1024,
+            max_tokens=self.max_new_tokens,
         )
         return response["choices"][0]["message"]["content"].strip()
 
     # ------------------------------------------------------------------
     def health_check(self) -> bool:
         return self._llm is not None
+
+
+# ---------------------------------------------------------------------------
+# Hugging Face Transformers backend (Spaces / ZeroGPU)
+# ---------------------------------------------------------------------------
+
+class HuggingFaceTransformersModel(BaseLLM):
+    """Runs MedGemma through Transformers for Hugging Face Spaces."""
+
+    def __init__(
+        self,
+        model_name: str = "google/medgemma-1.5-4b-it",
+        temperature: float = 0.3,
+        max_new_tokens: int = 2048,
+        system_prompt: str = "",
+    ) -> None:
+        try:
+            import torch
+            from transformers import AutoModelForImageTextToText, AutoProcessor
+        except ImportError as exc:
+            raise ImportError(
+                "hf_transformers backend requires torch, transformers, and accelerate."
+            ) from exc
+
+        self.torch = torch
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_new_tokens = max_new_tokens
+        self.system_prompt = system_prompt
+        self.processor = AutoProcessor.from_pretrained(
+            model_name,
+            token=os.getenv("HF_TOKEN"),
+        )
+        self.model = AutoModelForImageTextToText.from_pretrained(
+            model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            token=os.getenv("HF_TOKEN"),
+        )
+        global _HF_MODEL, _HF_PROCESSOR
+        _HF_MODEL = self.model
+        _HF_PROCESSOR = self.processor
+
+    def generate(self, prompt: str) -> str:
+        return _hf_generate(
+            prompt,
+            self.system_prompt,
+            self.temperature,
+            self.max_new_tokens,
+        )
+
+    def health_check(self) -> bool:
+        return self.model is not None and self.processor is not None
+
+
+@spaces.GPU(duration=120)
+def _hf_generate(
+    prompt: str,
+    system_prompt: str,
+    temperature: float,
+    max_new_tokens: int,
+) -> str:
+    if _HF_MODEL is None or _HF_PROCESSOR is None:
+        raise RuntimeError("Hugging Face model is not loaded.")
+
+    import torch
+
+    messages = []
+    if system_prompt:
+        messages.append(
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": system_prompt}],
+            }
+        )
+    messages.append({"role": "user", "content": [{"type": "text", "text": prompt}]})
+    inputs = _HF_PROCESSOR.apply_chat_template(
+        messages,
+        add_generation_prompt=True,
+        tokenize=True,
+        return_dict=True,
+        return_tensors="pt",
+    ).to(_HF_MODEL.device)
+    input_len = inputs["input_ids"].shape[-1]
+    generation_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "do_sample": temperature > 0,
+    }
+    if temperature > 0:
+        generation_kwargs["temperature"] = temperature
+    with torch.inference_mode():
+        generation = _HF_MODEL.generate(**inputs, **generation_kwargs)
+    return _HF_PROCESSOR.decode(generation[0][input_len:], skip_special_tokens=True).strip()
+
+
+# ---------------------------------------------------------------------------
+# OpenAI-compatible backend (Nebius / serverless endpoints)
+# ---------------------------------------------------------------------------
+
+class OpenAICompatibleModel(BaseLLM):
+    """Calls an OpenAI-compatible chat completions endpoint."""
+
+    def __init__(
+        self,
+        model_name: str,
+        base_url: str,
+        api_key: str,
+        temperature: float = 0.3,
+        max_new_tokens: int = 2048,
+        system_prompt: str = "",
+    ) -> None:
+        if not base_url:
+            raise ValueError("openai_compatible.base_url must be configured.")
+        if not api_key:
+            raise ValueError("OPENAI_COMPATIBLE_API_KEY must be configured.")
+        self.model_name = model_name
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.temperature = temperature
+        self.max_new_tokens = max_new_tokens
+        self.system_prompt = system_prompt
+
+    def generate(self, prompt: str) -> str:
+        url = f"{self.base_url}/v1/chat/completions"
+        messages = []
+        if self.system_prompt:
+            messages.append({"role": "system", "content": self.system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": self.temperature,
+            "max_tokens": self.max_new_tokens,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"Cannot reach OpenAI-compatible endpoint at {self.base_url}.") from exc
+        return body.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+    def health_check(self) -> bool:
+        return bool(self.base_url and self.api_key)
 
 
 # ---------------------------------------------------------------------------
@@ -171,10 +353,21 @@ _SYSTEM_PROMPT = (
 )
 
 
+def _model_cfg_key(settings_json: str) -> str:
+    return settings_json
+
+
 def get_model(settings: dict) -> BaseLLM:
     """Instantiate the correct backend from settings dict."""
+    return _get_model_cached(json.dumps(settings, sort_keys=True))
+
+
+@lru_cache(maxsize=4)
+def _get_model_cached(settings_json: str) -> BaseLLM:
+    settings = json.loads(_model_cfg_key(settings_json))
     model_cfg = settings.get("model", {})
     backend = model_cfg.get("backend", "ollama").lower()
+    max_new_tokens = int(model_cfg.get("max_new_tokens", 2048))
 
     if backend == "ollama":
         return OllamaModel(
@@ -182,6 +375,7 @@ def get_model(settings: dict) -> BaseLLM:
             base_url=model_cfg.get("ollama_base_url", "http://localhost:11434"),
             temperature=float(model_cfg.get("temperature", 0.3)),
             context_length=int(model_cfg.get("context_length", 4096)),
+            max_new_tokens=max_new_tokens,
             system_prompt=_SYSTEM_PROMPT,
         )
     elif backend in ("llama_cpp", "llama-cpp", "llamacpp"):
@@ -194,8 +388,28 @@ def get_model(settings: dict) -> BaseLLM:
             model_path=model_path,
             temperature=float(model_cfg.get("temperature", 0.3)),
             context_length=int(model_cfg.get("context_length", 4096)),
+            max_new_tokens=max_new_tokens,
             n_gpu_layers=int(model_cfg.get("n_gpu_layers", 0)),
             system_prompt=_SYSTEM_PROMPT,
         )
+    elif backend in ("hf_transformers", "huggingface", "transformers"):
+        return HuggingFaceTransformersModel(
+            model_name=model_cfg.get("name", "google/medgemma-1.5-4b-it"),
+            temperature=float(model_cfg.get("temperature", 0.3)),
+            max_new_tokens=max_new_tokens,
+            system_prompt=_SYSTEM_PROMPT,
+        )
+    elif backend in ("openai_compatible", "openai-compatible", "nebius"):
+        return OpenAICompatibleModel(
+            model_name=model_cfg.get("name", "google/medgemma-1.5-4b-it"),
+            base_url=model_cfg.get("openai_compatible_base_url", ""),
+            api_key=model_cfg.get("openai_compatible_api_key", ""),
+            temperature=float(model_cfg.get("temperature", 0.3)),
+            max_new_tokens=max_new_tokens,
+            system_prompt=_SYSTEM_PROMPT,
+        )
     else:
-        raise ValueError(f"Unknown backend: {backend!r}. Use 'ollama' or 'llama_cpp'.")
+        raise ValueError(
+            f"Unknown backend: {backend!r}. Use 'ollama', 'llama_cpp', "
+            "'hf_transformers', or 'openai_compatible'."
+        )

@@ -3,6 +3,7 @@ Prompt templates for the three output types:
   1. Symptom timeline
   2. Questions to ask the doctor
   3. Relevant background information
+  4. Combined prep report
 """
 
 from __future__ import annotations
@@ -98,3 +99,39 @@ Use plain language. Keep each section brief (2-4 sentences). Do NOT diagnose. En
 ---
 
 Respond with the formatted background information. Use clear section headers."""
+
+
+# ---------------------------------------------------------------------------
+# Combined prep report prompt
+# ---------------------------------------------------------------------------
+
+def build_prep_report_prompt(symptoms: str, notes: str, medications: str) -> str:
+    context = _build_context_block(symptoms, notes, medications)
+    return f"""You are helping a patient prepare for a doctor's appointment.
+
+Use the patient-provided information below to produce three separate sections.
+Do not diagnose. Do not claim certainty. Keep the content useful for discussion
+with a qualified healthcare professional.
+
+--- Patient Information ---
+{context}
+---
+
+Return exactly these section markers in this order:
+
+TIMELINE:
+- Organize symptoms chronologically when possible.
+- Note patterns, triggers, aggravating factors, relieving factors, and new vs ongoing symptoms.
+- Use concise bullets.
+
+QUESTIONS:
+- Generate specific, high-value questions the patient can ask their doctor.
+- Include questions about possible causes, tests, medication concerns, urgency, and follow-up.
+- Use a numbered list.
+
+RELEVANT_INFO:
+- Provide brief background information that may help the patient have an informed conversation.
+- Mention general red flags and medication-related considerations when relevant.
+- End with a reminder that this is informational only and not a substitute for professional medical advice.
+
+Start directly with TIMELINE:"""

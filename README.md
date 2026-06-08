@@ -1,20 +1,23 @@
 # Medical Appointment Prep Assistant
 
-A locally-running AI assistant that helps you prepare for doctor's appointments.
+A dual-mode AI assistant that helps you prepare for doctor's appointments.
 Enter your symptoms, notes, and medications — get back a symptom timeline, questions
 to ask your doctor, and relevant background information.
 
-**Everything runs on your machine. No data leaves your device.**
+Local mode runs on your machine with Ollama or llama.cpp. Hosted mode is designed
+for Hugging Face Spaces now and OpenAI-compatible serverless endpoints such as
+Nebius later.
 
 ---
 
 ## Features
 
 - Gradio 6 web UI (runs in your browser)
-- Two LLM backend options: **Ollama** (recommended) or **llama-cpp-python**
+- One generation call fills all report tabs: Timeline, Questions, Relevant Info
+- Four LLM backend options: **Ollama**, **llama-cpp-python**, **Hugging Face Transformers**, or **OpenAI-compatible**
 - Defaults to MedGemma 1.5 via Ollama
 - Local RxTerms medication autocomplete with custom entry fallback
-- Works on Windows, macOS, and Linux
+- Works on Windows, macOS, Linux, and Hugging Face Spaces
 
 ---
 
@@ -105,6 +108,47 @@ Download a compatible `.gguf` from [Hugging Face](https://huggingface.co) (searc
 
 ---
 
+## Hosted Backends
+
+Hosted mode changes the privacy posture: appointment entries are processed by the
+configured remote model backend. Set `APP_DEPLOYMENT=huggingface` or
+`APP_DEPLOYMENT=hosted` so the UI shows hosted-mode copy.
+
+### Hugging Face Space
+
+Use the separate Space export folder to avoid adding Torch and Transformers to the
+lightweight local install path.
+
+```bash
+python scripts/export_hf_space.py /path/to/hf-space-repo
+```
+
+Configure the Space with:
+
+```text
+HF_TOKEN=<token with access to google/medgemma-1.5-4b-it>
+MODEL_BACKEND=hf_transformers
+MODEL_NAME=google/medgemma-1.5-4b-it
+APP_DEPLOYMENT=huggingface
+```
+
+The Space template lives in `deploy/huggingface-space/` and pins Gradio 6.
+
+### OpenAI-Compatible / Nebius
+
+The `openai_compatible` backend calls `/v1/chat/completions` and is intended for
+Nebius Serverless AI or any compatible hosted endpoint.
+
+```text
+MODEL_BACKEND=openai_compatible
+MODEL_NAME=<hosted-model-name>
+OPENAI_COMPATIBLE_BASE_URL=<endpoint-base-url>
+OPENAI_COMPATIBLE_API_KEY=<api-key>
+APP_DEPLOYMENT=hosted
+```
+
+---
+
 ## Configuration
 
 All settings live in `config/settings.yaml`. You can also override them with a `.env` file
@@ -112,10 +156,12 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `model.backend` | `ollama` | `ollama` or `llama_cpp` |
+| `model.backend` | `ollama` | `ollama`, `llama_cpp`, `hf_transformers`, or `openai_compatible` |
 | `model.name` | `medgemma1.5` | Ollama model name |
 | `model.ollama_base_url` | `http://localhost:11434` | Ollama API URL |
 | `model.model_path` | — | Path to `.gguf` file (llama_cpp only) |
+| `model.max_new_tokens` | `2048` | Generation budget for the combined report |
+| `app.deployment` | `local` | UI copy mode: `local`, `huggingface`, or `hosted` |
 | `model.temperature` | `0.3` | Generation temperature |
 | `model.context_length` | `4096` | Context window size |
 | `server.port` | `7860` | Local web server port |
@@ -149,12 +195,15 @@ medical-appt-prep/
 │   └── settings.yaml    # Model and server configuration
 ├── data/
 │   └── medications/     # Bundled RxTerms autocomplete index
+├── deploy/
+│   └── huggingface-space/ # Gradio Space template
 ├── scripts/
+│   ├── export_hf_space.py # Build a standalone HF Space repo folder
 │   └── sync_rxterms.py  # Refreshes the local RxTerms index
 ├── src/
 │   ├── __init__.py
 │   ├── medications.py   # Medication autocomplete data helpers
-│   ├── model.py         # LLM backends (Ollama, llama-cpp-python)
+│   ├── model.py         # LLM backends
 │   ├── prompts.py       # Prompt templates for each output type
 │   └── processor.py     # Input validation and output post-processing
 ├── requirements.txt

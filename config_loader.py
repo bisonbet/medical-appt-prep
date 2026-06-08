@@ -23,7 +23,11 @@ def load_settings() -> dict:
         "OLLAMA_BASE_URL": ("model", "ollama_base_url"),
         "MODEL_NAME": ("model", "name"),
         "MODEL_PATH": ("model", "model_path"),
+        "MODEL_BACKEND": ("model", "backend"),
         "BACKEND": ("model", "backend"),
+        "APP_DEPLOYMENT": ("app", "deployment"),
+        "OPENAI_COMPATIBLE_BASE_URL": ("model", "openai_compatible_base_url"),
+        "OPENAI_COMPATIBLE_API_KEY": ("model", "openai_compatible_api_key"),
     }
     for env_key, (section, key) in env_map.items():
         val = os.getenv(env_key)

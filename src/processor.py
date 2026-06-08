@@ -64,6 +64,59 @@ def parse_output(raw: str) -> str:
     return cleaned
 
 
+REPORT_SECTION_FALLBACK = (
+    "_The model returned a report, but this section could not be separated cleanly. "
+    "Review the full generated text in the relevant information tab._"
+)
+
+
+def parse_prep_report(raw: str) -> tuple[str, str, str]:
+    """Parse a one-call report into timeline, questions, and relevant info."""
+    cleaned = parse_output(raw)
+    if cleaned.startswith("_No output generated"):
+        return cleaned, cleaned, cleaned
+
+    markers = {
+        "timeline": r"TIMELINE\s*:",
+        "questions": r"QUESTIONS\s*:",
+        "relevant": r"RELEVANT(?:_|\s+)INFO\s*:",
+    }
+    matches = {
+        name: re.search(pattern, cleaned, flags=re.IGNORECASE)
+        for name, pattern in markers.items()
+    }
+
+    if not all(matches.values()):
+        return REPORT_SECTION_FALLBACK, REPORT_SECTION_FALLBACK, cleaned
+
+    timeline_match = matches["timeline"]
+    questions_match = matches["questions"]
+    relevant_match = matches["relevant"]
+    assert timeline_match and questions_match and relevant_match
+
+    ordered = sorted(
+        [
+            ("timeline", timeline_match),
+            ("questions", questions_match),
+            ("relevant", relevant_match),
+        ],
+        key=lambda item: item[1].start(),
+    )
+    positions = {name: (match.end(), None) for name, match in ordered}
+    for index, (name, _match) in enumerate(ordered[:-1]):
+        next_start = ordered[index + 1][1].start()
+        positions[name] = (positions[name][0], next_start)
+    last_name = ordered[-1][0]
+    positions[last_name] = (positions[last_name][0], len(cleaned))
+
+    sections = {}
+    for name, (start, end) in positions.items():
+        value = cleaned[start:end].strip()
+        sections[name] = value or REPORT_SECTION_FALLBACK
+
+    return sections["timeline"], sections["questions"], sections["relevant"]
+
+
 # ---------------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------------

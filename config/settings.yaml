@@ -3,7 +3,7 @@
 # Restart the app after making changes.
 
 model:
-  # Backend: "ollama" (recommended) or "llama_cpp"
+  # Backend: "ollama" (recommended local), "llama_cpp", "hf_transformers", or "openai_compatible"
   backend: ollama
 
   # --- Ollama settings ---
@@ -17,10 +17,18 @@ model:
   # model_path: /path/to/your/model.gguf
   # n_gpu_layers: 0  # Set > 0 to offload layers to GPU (requires GPU build)
 
+  # --- Hosted OpenAI-compatible settings (Nebius/serverless, experimental) ---
+  # openai_compatible_base_url: https://your-endpoint.example.com
+  # openai_compatible_api_key: set via OPENAI_COMPATIBLE_API_KEY
+
   # --- Shared settings ---
   context_length: 4096   # Max tokens in context window
   temperature: 0.3       # Lower = more deterministic, higher = more creative
-  max_new_tokens: 1024   # Max tokens to generate per response
+  max_new_tokens: 2048   # Max tokens to generate per combined report
+
+app:
+  # Deployment: "local", "huggingface", or "hosted"
+  deployment: local
 
 server:
   host: 127.0.0.1  # Use 0.0.0.0 to allow LAN access

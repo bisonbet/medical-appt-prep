@@ -5,12 +5,8 @@ Main Gradio application entry point.
 
 import gradio as gr
 from src.model import get_model
-from src.prompts import (
-    build_timeline_prompt,
-    build_questions_prompt,
-    build_relevant_info_prompt,
-)
-from src.processor import validate_inputs, parse_output
+from src.prompts import build_prep_report_prompt
+from src.processor import validate_inputs, parse_prep_report
 from src.medications import load_medication_choices, medication_index_summary
 from config_loader import load_settings
 
@@ -86,7 +82,7 @@ THEME_MODE_HEAD = """
 
 
 def run_inference(symptoms: str, notes: str, medications: str):
-    """Run all three LLM inference passes and return results."""
+    """Run one LLM inference pass and return the three report sections."""
     errors = validate_inputs(symptoms=symptoms, notes=notes, medications=medications)
     if errors:
         error_msg = "\n".join(errors)
@@ -94,19 +90,9 @@ def run_inference(symptoms: str, notes: str, medications: str):
 
     model = get_model(settings)
 
-    timeline_prompt = build_timeline_prompt(symptoms, notes, medications)
-    questions_prompt = build_questions_prompt(symptoms, notes, medications)
-    relevant_info_prompt = build_relevant_info_prompt(symptoms, notes, medications)
-
-    timeline_raw = model.generate(timeline_prompt)
-    questions_raw = model.generate(questions_prompt)
-    relevant_raw = model.generate(relevant_info_prompt)
-
-    timeline = parse_output(timeline_raw)
-    questions = parse_output(questions_raw)
-    relevant = parse_output(relevant_raw)
-
-    return timeline, questions, relevant
+    report_prompt = build_prep_report_prompt(symptoms, notes, medications)
+    report_raw = model.generate_report(report_prompt)
+    return parse_prep_report(report_raw)
 
 
 def add_medication_entry(medication_name: str, instructions: str, current_medications: str):
@@ -133,6 +119,7 @@ def populate_medication_name(selected_medication: str, current_name: str):
 
 
 def create_ui() -> gr.Blocks:
+    app_cfg = settings.get("app", {})
     model_cfg = settings.get("model", {})
     backend = model_cfg.get("backend", "ollama")
     model_name = model_cfg.get("name", "medgemma1.5")
@@ -140,6 +127,28 @@ def create_ui() -> gr.Blocks:
     temperature = model_cfg.get("temperature", 0.3)
     medication_choices = load_medication_choices()
     medication_summary = medication_index_summary()
+    deployment = app_cfg.get("deployment", "local")
+    is_local_deployment = deployment == "local"
+    nav_status = "Local" if is_local_deployment else "Hosted"
+    eyebrow = "Private prep workspace" if is_local_deployment else "Hosted prep workspace"
+    privacy_line = (
+        "Runs locally. No appointment details leave this machine."
+        if is_local_deployment
+        else "Hosted mode processes entries with the configured remote model backend."
+    )
+    about_heading = (
+        "Local medical appointment preparation."
+        if is_local_deployment
+        else "Hosted medical appointment preparation."
+    )
+    about_copy = (
+        "This tool organizes appointment notes with a local language model."
+        if is_local_deployment
+        else "This tool organizes appointment notes with a hosted language model backend."
+    )
+
+    if backend.lower() in ("hf_transformers", "huggingface", "transformers"):
+        get_model(settings)
 
     with gr.Blocks(
         title="Medical Appointment Prep Assistant",
@@ -147,12 +156,12 @@ def create_ui() -> gr.Blocks:
         fill_width=True,
     ) as app:
         gr.HTML(
-            """
+            f"""
             <header class="global-nav" aria-label="Application">
                 <div class="nav-inner">
                     <span class="nav-mark" aria-hidden="true"></span>
                     <span class="nav-title">Medical Appointment Prep</span>
-                    <span class="nav-status">Local</span>
+                    <span class="nav-status">{nav_status}</span>
                     <div class="theme-switcher" aria-label="Appearance">
                         <button type="button" data-theme-option="system">System</button>
                         <button type="button" data-theme-option="light">Light</button>
@@ -161,13 +170,13 @@ def create_ui() -> gr.Blocks:
                 </div>
             </header>
             <section class="hero-tile">
-                <p class="eyebrow">Private prep workspace</p>
+                <p class="eyebrow">{eyebrow}</p>
                 <h1>Arrive clear, organized, and ready.</h1>
                 <p class="hero-copy">
                     Turn symptoms, notes, and medications into a concise timeline,
                     visit questions, and relevant background information.
                 </p>
-                <p class="privacy-line">Runs locally. No appointment details leave this machine.</p>
+                <p class="privacy-line">{privacy_line}</p>
             </section>
             """
         )
@@ -342,12 +351,12 @@ def create_ui() -> gr.Blocks:
 
         with gr.Tab("About", elem_classes=["main-tabs"]):
             gr.HTML(
-                """
+                f"""
                 <section class="about-tile">
                     <p class="section-kicker">About</p>
-                    <h2>Local medical appointment preparation.</h2>
+                    <h2>{about_heading}</h2>
                     <p>
-                        This tool organizes appointment notes with a local language model.
+                        {about_copy}
                         It is for informational and organizational purposes only, not diagnosis,
                         treatment, or a substitute for professional medical advice.
                     </p>
