@@ -8,9 +8,30 @@ model:
 
   # --- Ollama settings ---
   # Model name as shown by `ollama list`
-  # Recommended: medgemma1.5 (Google MedGemma 1.5 4B)
-  name: medgemma1.5
+  # This is also used as a fallback if no selected preset applies.
+  name: medgemma1.5:4b
   ollama_base_url: http://localhost:11434
+
+  # Selectable medical model presets. Add future models here by giving each
+  # preset an id, label, description, and backend-specific model names.
+  selected_preset: medgemma-4b
+  presets:
+    - id: medgemma-4b
+      label: MedGemma 1.5 4B
+      description: Updated MedGemma 1.5 option for everyday appointment preparation.
+      backends:
+        ollama:
+          name: medgemma1.5:4b
+        hf_transformers:
+          name: google/medgemma-1.5-4b-it
+    - id: medgemma-27b
+      label: MedGemma 27B
+      description: Larger MedGemma option for more capable medical reasoning when hardware allows.
+      backends:
+        ollama:
+          name: medgemma:27b
+        hf_transformers:
+          name: google/medgemma-27b-it
 
   # --- llama-cpp-python settings ---
   # Uncomment and set this if using backend: llama_cpp

@@ -16,6 +16,8 @@ import urllib.error
 from functools import lru_cache
 from typing import Any
 
+from src.model_catalog import resolve_model_settings
+
 
 try:
     import spaces  # type: ignore[import]
@@ -33,6 +35,59 @@ except ImportError:
 
 _HF_MODEL: Any | None = None
 _HF_PROCESSOR: Any | None = None
+
+
+def list_ollama_models(base_url: str = "http://localhost:11434", timeout: int = 5) -> set[str]:
+    """Return locally available Ollama model names."""
+    req = urllib.request.Request(f"{base_url.rstrip('/')}/api/tags", method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise RuntimeError(
+            f"Cannot reach Ollama at {base_url.rstrip('/')}. Is Ollama running?"
+        ) from exc
+
+    names = set()
+    for model in body.get("models", []):
+        name = model.get("name") or model.get("model")
+        if name:
+            names.add(name)
+    return names
+
+
+def is_ollama_model_available(model_name: str, base_url: str = "http://localhost:11434") -> bool:
+    """Return True when the requested Ollama model is already pulled locally."""
+    available = list_ollama_models(base_url)
+    if model_name in available:
+        return True
+    if ":" not in model_name and f"{model_name}:latest" in available:
+        return True
+    return False
+
+
+def pull_ollama_model(
+    model_name: str,
+    base_url: str = "http://localhost:11434",
+    timeout: int = 1800,
+) -> str:
+    """Pull an Ollama model using the local Ollama REST API."""
+    url = f"{base_url.rstrip('/')}/api/pull"
+    payload = {"model": model_name, "stream": False}
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Could not download {model_name} from Ollama.") from exc
+
+    status = body.get("status", "downloaded")
+    return str(status)
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +126,7 @@ class OllamaModel(BaseLLM):
 
     def __init__(
         self,
-        model_name: str = "medgemma1.5",
+        model_name: str = "medgemma1.5:4b",
         base_url: str = "http://localhost:11434",
         temperature: float = 0.3,
         context_length: int = 4096,
@@ -215,16 +270,23 @@ class HuggingFaceTransformersModel(BaseLLM):
         self.temperature = temperature
         self.max_new_tokens = max_new_tokens
         self.system_prompt = system_prompt
-        self.processor = AutoProcessor.from_pretrained(
-            model_name,
-            token=os.getenv("HF_TOKEN"),
-        )
-        self.model = AutoModelForImageTextToText.from_pretrained(
-            model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            token=os.getenv("HF_TOKEN"),
-        )
+        self.processor = AutoProcessor.from_pretrained(model_name, token=os.getenv("HF_TOKEN"))
+        try:
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                model_name,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                token=os.getenv("HF_TOKEN"),
+            )
+        except ValueError:
+            from transformers import AutoModelForMultimodalLM
+
+            self.model = AutoModelForMultimodalLM.from_pretrained(
+                model_name,
+                torch_dtype=torch.bfloat16,
+                device_map="auto",
+                token=os.getenv("HF_TOKEN"),
+            )
         global _HF_MODEL, _HF_PROCESSOR
         _HF_MODEL = self.model
         _HF_PROCESSOR = self.processor
@@ -364,14 +426,14 @@ def get_model(settings: dict) -> BaseLLM:
 
 @lru_cache(maxsize=4)
 def _get_model_cached(settings_json: str) -> BaseLLM:
-    settings = json.loads(_model_cfg_key(settings_json))
+    settings = resolve_model_settings(json.loads(_model_cfg_key(settings_json)))
     model_cfg = settings.get("model", {})
     backend = model_cfg.get("backend", "ollama").lower()
     max_new_tokens = int(model_cfg.get("max_new_tokens", 2048))
 
     if backend == "ollama":
         return OllamaModel(
-            model_name=model_cfg.get("name", "medgemma1.5"),
+            model_name=model_cfg.get("name", "medgemma1.5:4b"),
             base_url=model_cfg.get("ollama_base_url", "http://localhost:11434"),
             temperature=float(model_cfg.get("temperature", 0.3)),
             context_length=int(model_cfg.get("context_length", 4096)),

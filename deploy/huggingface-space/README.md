@@ -16,9 +16,9 @@ Hosted Gradio Space for the Medical Appointment Prep Assistant.
 
 Required Space secrets / variables:
 
-- `HF_TOKEN`: Hugging Face token with accepted access to `google/medgemma-1.5-4b-it`
+- `HF_TOKEN`: Hugging Face token with accepted MedGemma access
 - `MODEL_BACKEND=hf_transformers`
-- `MODEL_NAME=google/medgemma-1.5-4b-it`
+- `MODEL_PRESET=medgemma-4b` or `MODEL_PRESET=medgemma-27b`
 - `APP_DEPLOYMENT=huggingface`
 
 Build this Space folder from the main repo with:

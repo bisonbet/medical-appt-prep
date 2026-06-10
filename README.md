@@ -15,7 +15,8 @@ Nebius later.
 - Gradio 6 web UI (runs in your browser)
 - One generation call fills all report tabs: Timeline, Questions, Relevant Info
 - Four LLM backend options: **Ollama**, **llama-cpp-python**, **Hugging Face Transformers**, or **OpenAI-compatible**
-- Defaults to MedGemma 1.5 via Ollama
+- UI model selector backed by configurable medical model presets
+- Includes MedGemma 1.5 4B and MedGemma 27B presets for Ollama and Hugging Face Transformers
 - Local RxTerms medication autocomplete with custom entry fallback
 - Works on Windows, macOS, Linux, and Hugging Face Spaces
 
@@ -38,8 +39,17 @@ ollama serve
 
 Pull the model (in a new terminal):
 ```bash
-ollama pull medgemma1.5
+ollama pull medgemma1.5:4b
 ```
+
+For the larger MedGemma preset, also pull:
+```bash
+ollama pull medgemma:27b
+```
+
+If you select an Ollama model that has not been pulled yet, the Settings tab
+will prompt you to download it before generation. Hugging Face Transformers
+models are downloaded and cached automatically by the backend when used.
 
 ### 2. Clone and set up the project
 
@@ -126,13 +136,15 @@ python scripts/export_hf_space.py /path/to/hf-space-repo
 Configure the Space with:
 
 ```text
-HF_TOKEN=<token with access to google/medgemma-1.5-4b-it>
+HF_TOKEN=<token with accepted MedGemma access>
 MODEL_BACKEND=hf_transformers
-MODEL_NAME=google/medgemma-1.5-4b-it
+MODEL_PRESET=medgemma-4b
 APP_DEPLOYMENT=huggingface
 ```
 
 The Space template lives in `deploy/huggingface-space/` and pins Gradio 6.
+Select `medgemma-27b` in the UI or set `MODEL_PRESET=medgemma-27b` to use
+`google/medgemma-27b-it` on Hugging Face ZeroGPU.
 
 ### OpenAI-Compatible / Nebius
 
@@ -157,7 +169,9 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 | Key | Default | Description |
 |-----|---------|-------------|
 | `model.backend` | `ollama` | `ollama`, `llama_cpp`, `hf_transformers`, or `openai_compatible` |
-| `model.name` | `medgemma1.5` | Ollama model name |
+| `model.selected_preset` | `medgemma-4b` | Default UI model preset |
+| `model.presets` | MedGemma 1.5 4B / 27B | Backend-specific model catalog used by the UI selector |
+| `model.name` | `medgemma1.5:4b` | Fallback backend model name |
 | `model.ollama_base_url` | `http://localhost:11434` | Ollama API URL |
 | `model.model_path` | — | Path to `.gguf` file (llama_cpp only) |
 | `model.max_new_tokens` | `2048` | Generation budget for the combined report |
@@ -165,6 +179,9 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 | `model.temperature` | `0.3` | Generation temperature |
 | `model.context_length` | `4096` | Context window size |
 | `server.port` | `7860` | Local web server port |
+
+To add another selectable medical model later, add a new entry under
+`model.presets` with backend-specific names for the backends you want to support.
 
 ---
 

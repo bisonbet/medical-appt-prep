@@ -189,12 +189,11 @@ body,
   background: var(--apple-canvas);
   display: flex;
   flex-direction: column;
-  min-height: 390px;
-  padding: 76px 24px 72px;
+  min-height: 360px;
+  padding: 72px 24px 64px;
   text-align: center;
 }
 
-.eyebrow,
 .section-kicker {
   color: var(--apple-muted);
   font-family: var(--font-text);
@@ -208,30 +207,34 @@ body,
 .hero-tile h1 {
   color: var(--apple-ink);
   font-family: var(--font-display);
-  font-size: 56px;
+  font-size: 64px;
   font-weight: 600;
-  letter-spacing: -0.28px;
+  letter-spacing: -0.32px;
   line-height: 1.07;
   margin: 0;
+  max-width: 820px;
+}
+
+.hero-tile h2 {
+  color: var(--apple-ink);
+  font-family: var(--font-display);
+  font-size: 38px;
+  font-weight: 500;
+  letter-spacing: -0.19px;
+  line-height: 1.14;
+  margin: 18px 0 0;
   max-width: 820px;
 }
 
 .hero-copy {
   color: var(--apple-ink);
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 22px;
   font-weight: 400;
-  letter-spacing: 0.196px;
-  line-height: 1.14;
-  margin: 24px 0 0;
+  letter-spacing: 0;
+  line-height: 1.28;
+  margin: 20px 0 0;
   max-width: 780px;
-}
-
-.privacy-line {
-  color: var(--apple-muted);
-  font-size: 14px;
-  letter-spacing: -0.224px;
-  margin: 28px 0 0;
 }
 
 #app-shell .tabs {
@@ -328,7 +331,8 @@ body,
 }
 
 .apple-input textarea,
-.apple-input input {
+.apple-input input,
+.apple-input select {
   background: var(--apple-pearl) !important;
   border: 1px solid var(--apple-field-border) !important;
   border-radius: 18px !important;
@@ -343,7 +347,8 @@ body,
 }
 
 .apple-input textarea:focus,
-.apple-input input:focus {
+.apple-input input:focus,
+.apple-input select:focus {
   border-color: var(--apple-blue-focus) !important;
   outline: 2px solid var(--apple-focus-ring) !important;
 }
@@ -451,7 +456,7 @@ body,
 .settings-grid {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   margin: 32px 0 0;
 }
 
@@ -485,6 +490,47 @@ body,
   font-size: 12px;
   letter-spacing: -0.12px;
   margin: 24px 0 0;
+}
+
+.model-helper {
+  margin: 8px 0 20px !important;
+}
+
+.model-status {
+  margin: 8px 0 0 !important;
+}
+
+.download-model-button {
+  margin-top: 14px;
+  width: fit-content;
+}
+
+.model-helper.block,
+.model-status.block {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.model-helper .prose,
+.model-helper p,
+.model-status .prose,
+.model-status p {
+  color: var(--apple-muted) !important;
+  font-size: 12px !important;
+  letter-spacing: -0.12px !important;
+  line-height: 1.45 !important;
+  margin: 0 !important;
+}
+
+.settings-controls {
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.settings-controls .input-label {
+  margin-top: 0 !important;
 }
 
 .about-tile p:not(.section-kicker) {
@@ -534,18 +580,25 @@ body,
   }
 
   .hero-tile {
-    min-height: 330px;
-    padding: 48px 20px;
+    min-height: 300px;
+    padding: 44px 20px;
   }
 
   .hero-tile h1 {
-    font-size: 34px;
+    font-size: 40px;
     line-height: 1.12;
   }
 
+  .hero-tile h2 {
+    font-size: 26px;
+    line-height: 1.18;
+    margin-top: 14px;
+  }
+
   .hero-copy {
-    font-size: 21px;
+    font-size: 18px;
     line-height: 1.24;
+    margin-top: 16px;
   }
 
   .prep-grid,

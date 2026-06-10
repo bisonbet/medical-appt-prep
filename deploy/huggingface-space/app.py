@@ -11,6 +11,7 @@ import os
 
 os.environ.setdefault("APP_DEPLOYMENT", "huggingface")
 os.environ.setdefault("MODEL_BACKEND", "hf_transformers")
+os.environ.setdefault("MODEL_PRESET", "medgemma-4b")
 os.environ.setdefault("MODEL_NAME", "google/medgemma-1.5-4b-it")
 
 from shared_app import APPLE_CSS_PATH, APPLE_THEME, THEME_MODE_HEAD, create_ui, settings  # noqa: E402
