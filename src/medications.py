@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 INDEX_PATH = ROOT_DIR / "data" / "medications" / "rxterms_medications.json"
+COMMON_INDEX_PATH = ROOT_DIR / "data" / "medications" / "rxterms_medications_common.json"
 
 
 COMMON_SUPPLEMENTS = [
@@ -35,11 +36,14 @@ COMMON_SUPPLEMENTS = [
 
 @lru_cache(maxsize=1)
 def load_medication_choices() -> list[str]:
-    """Return local RxTerms choices plus common supplement fallback choices."""
+    """Return local RxTerms choices (pruned to common medications) plus common supplement fallback choices."""
     choices: list[str] = []
 
-    if INDEX_PATH.exists():
-        with INDEX_PATH.open("r", encoding="utf-8") as handle:
+    # Use pruned common medications list if available, otherwise fall back to full list
+    index_to_use = COMMON_INDEX_PATH if COMMON_INDEX_PATH.exists() else INDEX_PATH
+    
+    if index_to_use.exists():
+        with index_to_use.open("r", encoding="utf-8") as handle:
             payload = json.load(handle)
         choices.extend(item["label"] for item in payload.get("medications", []))
 
@@ -53,10 +57,13 @@ def load_medication_choices() -> list[str]:
 
 
 def medication_index_summary() -> str:
-    if not INDEX_PATH.exists():
+    # Prefer common index if available
+    index_to_use = COMMON_INDEX_PATH if COMMON_INDEX_PATH.exists() else INDEX_PATH
+    
+    if not index_to_use.exists():
         return "Medication autocomplete index is not installed."
 
-    with INDEX_PATH.open("r", encoding="utf-8") as handle:
+    with index_to_use.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     return (
         f"{payload.get('source', 'RxTerms')} {payload.get('release', '')} "

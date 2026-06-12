@@ -16,6 +16,7 @@ from src.prompts import build_prep_report_prompt
 from src.processor import validate_inputs, parse_prep_report
 from src.medications import load_medication_choices, medication_index_summary
 from config_loader import load_settings
+import gradio as gr
 
 settings = load_settings()
 
@@ -216,14 +217,14 @@ def run_inference(
     return parse_prep_report(report_raw)
 
 
-def add_medication_entry(medication_name: str, instructions: str, current_medications: str):
+def add_medication_entry(medication_name: str, instructions: str, current_medications: str, all_choices: list = None):
     """Append a selected or custom medication line to the medication list."""
     medication_name = (medication_name or "").strip()
     instructions = (instructions or "").strip()
     current_medications = (current_medications or "").strip()
 
     if not medication_name and not instructions:
-        return current_medications, "", "", None
+        return current_medications, "", "", gr.update(choices=all_choices[:8] if all_choices else [], value=None)
 
     if medication_name and instructions:
         entry = f"{medication_name} - {instructions}"
@@ -231,7 +232,22 @@ def add_medication_entry(medication_name: str, instructions: str, current_medica
         entry = medication_name or instructions
 
     updated = f"{current_medications}\n{entry}".strip() if current_medications else entry
-    return updated, "", "", None
+    return updated, "", "", gr.update(choices=all_choices[:8] if all_choices else [], value=None)
+
+
+def clear_all_inputs(all_choices: list):
+    """Clear all input fields and reset medication picker."""
+    return (
+        "",  # symptoms
+        "",  # notes
+        "",  # medications
+        "",  # medication_name
+        "",  # medication_instructions
+        gr.update(choices=all_choices[:8] if all_choices else [], value=None),  # medication_picker
+        DEFAULT_OUTPUT,  # timeline_output
+        DEFAULT_OUTPUT,  # questions_output
+        DEFAULT_OUTPUT,  # relevant_output
+    )
 
 
 def populate_medication_name(selected_medication: str, current_name: str):
@@ -257,7 +273,7 @@ def create_ui() -> gr.Blocks:
     temperature = _temperature_choice_value(
         selected_model_cfg.get("temperature", model_cfg.get("temperature", 0.3))
     )
-    medication_choices = load_medication_choices()
+    all_medication_choices = load_medication_choices()
     medication_summary = medication_index_summary()
     deployment = app_cfg.get("deployment", "local")
     is_local_deployment = deployment == "local"
@@ -340,7 +356,7 @@ def create_ui() -> gr.Blocks:
                     medication_picker = gr.Dropdown(
                         label="Find a Medication",
                         show_label=False,
-                        choices=medication_choices,
+                        choices=all_medication_choices[:8],  # Show first 8 initially for performance
                         value=None,
                         filterable=True,
                         allow_custom_value=True,
@@ -512,21 +528,39 @@ def create_ui() -> gr.Blocks:
             outputs=[model_status, download_model_btn],
             api_visibility="private",
         )
+        # Create a state variable to hold all medication choices for filtering
+        medication_choices_state = gr.State(all_medication_choices)
+        
+        def handle_medication_change(selected_value, current_name, all_choices):
+            """Handle medication picker change: populate name field and filter choices."""
+            # Populate the medication name field
+            name_result = (selected_value or current_name or "").strip()
+            
+            # Filter choices based on current input
+            if selected_value and selected_value.strip():
+                query_lower = selected_value.strip().casefold()
+                matches = [choice for choice in all_choices if query_lower in choice.casefold()]
+                filtered_choices = matches[:8]
+            else:
+                filtered_choices = all_choices[:8]
+            
+            return name_result, gr.update(choices=filtered_choices)
+        
         medication_picker.change(
-            fn=populate_medication_name,
-            inputs=[medication_picker, medication_name],
-            outputs=[medication_name],
+            fn=handle_medication_change,
+            inputs=[medication_picker, medication_name, medication_choices_state],
+            outputs=[medication_name, medication_picker],
             api_visibility="private",
         )
         add_medication_btn.click(
             fn=add_medication_entry,
-            inputs=[medication_name, medication_instructions, medications],
+            inputs=[medication_name, medication_instructions, medications, medication_choices_state],
             outputs=[medications, medication_name, medication_instructions, medication_picker],
             api_visibility="private",
         )
         clear_btn.click(
-            fn=lambda: ("", "", "", "", "", None, DEFAULT_OUTPUT, DEFAULT_OUTPUT, DEFAULT_OUTPUT),
-            inputs=[],
+            fn=clear_all_inputs,
+            inputs=[medication_choices_state],
             outputs=[
                 symptoms,
                 notes,
