@@ -3,37 +3,44 @@ Medical Appointment Prep Assistant
 Main Gradio application entry point.
 """
 
+import os
+import re
+import subprocess
+import time
+
 import gradio as gr
 from src.model import get_model, is_ollama_model_available, pull_ollama_model
 from src.model_catalog import (
     canonical_backend,
-    describe_model_preset,
     get_default_model_preset_id,
-    get_model_preset_choices,
     resolve_model_settings,
 )
-from src.prompts import build_prep_report_prompt
-from src.processor import validate_inputs, parse_prep_report
-from src.medications import load_medication_choices, medication_index_summary
+from src.prompts import (
+    build_questions_prompt,
+    build_relevant_info_prompt,
+    build_timeline_prompt,
+)
+from src.processor import clean_section_output, validate_inputs
+from src.medications import (
+    filter_medication_choices,
+    load_medication_choices,
+    medication_index_summary,
+)
 from config_loader import load_settings
-import gradio as gr
 
 settings = load_settings()
+_GPU_RUNTIME_LOGGED = False
+_RECENT_TIMING_RE = re.compile(
+    r"\b(today|tonight|this morning|this afternoon|this evening|yesterday|last night)\b",
+    flags=re.IGNORECASE,
+)
 
 
 DEFAULT_OUTPUT = "_Your prep report will appear here._"
 APPLE_CSS_PATH = "assets/apple.css"
 APPLE_THEME = gr.themes.Soft()
-CONTEXT_CHOICES = [
-    ("4096", "4096"),
-    ("8192", "8192"),
-    ("16k", "16384"),
-]
-TEMPERATURE_CHOICES = [
-    ("0.1 - Most steady", "0.1"),
-    ("0.3 - Balanced default", "0.3"),
-    ("0.5 - More varied", "0.5"),
-]
+DEFAULT_CONTEXT_LENGTH = "8192"
+DEFAULT_TEMPERATURE = "0.3"
 DOWNLOAD_MODEL_BUTTON_LABEL = "Download Model"
 THEME_MODE_HEAD = """
 <script>
@@ -100,29 +107,30 @@ THEME_MODE_HEAD = """
 """
 
 
-def model_preset_details(model_preset_id: str):
-    """Return display copy for the selected model preset."""
-    return describe_model_preset(settings, model_preset_id)
-
-
 def _context_choice_value(context_length: object) -> str:
-    value = str(context_length or "4096")
-    allowed_values = {choice_value for _label, choice_value in CONTEXT_CHOICES}
-    return value if value in allowed_values else "4096"
+    value = str(context_length or DEFAULT_CONTEXT_LENGTH)
+    return value if value.isdigit() else DEFAULT_CONTEXT_LENGTH
 
 
 def _temperature_choice_value(temperature: object) -> str:
-    value = str(temperature or "0.3")
-    allowed_values = {choice_value for _label, choice_value in TEMPERATURE_CHOICES}
-    return value if value in allowed_values else "0.3"
+    value = str(temperature or DEFAULT_TEMPERATURE)
+    try:
+        float(value)
+    except ValueError:
+        return DEFAULT_TEMPERATURE
+    return value
+
+
+def _default_model_preset_id() -> str:
+    return get_default_model_preset_id(settings, settings.get("model", {}).get("backend", "ollama"))
 
 
 def _model_settings_for_selection(
-    model_preset_id: str,
-    context_length: str = "4096",
-    temperature: str = "0.3",
+    model_preset_id: str = "",
+    context_length: str = DEFAULT_CONTEXT_LENGTH,
+    temperature: str = DEFAULT_TEMPERATURE,
 ) -> dict:
-    model_settings = resolve_model_settings(settings, model_preset_id)
+    model_settings = resolve_model_settings(settings, model_preset_id or _default_model_preset_id())
     model_settings.setdefault("model", {})["context_length"] = int(_context_choice_value(context_length))
     model_settings.setdefault("model", {})["temperature"] = float(_temperature_choice_value(temperature))
     return model_settings
@@ -130,13 +138,68 @@ def _model_settings_for_selection(
 
 def _ollama_model_prompt(model_name: str) -> str:
     return (
-        f"**{model_name} is not downloaded.** Go to Settings and choose "
-        f"{DOWNLOAD_MODEL_BUTTON_LABEL} to pull it with Ollama before generating a report."
+        f"**{model_name} is not downloaded.** Ask the app owner to download it with Ollama "
+        f"before generating a report."
     )
 
 
+def _with_zero_gpu(fn):
+    """Request ZeroGPU only in hosted Spaces; keep local imports lightweight."""
+    if settings.get("app", {}).get("deployment") != "huggingface":
+        return fn
+    try:
+        import spaces  # type: ignore[import]
+    except ImportError:
+        return fn
+    return spaces.GPU(duration=120)(fn)
+
+
+def _log_gpu_runtime_once(model_cfg: dict) -> None:
+    """Emit non-private GPU diagnostics while inside the generation call."""
+    global _GPU_RUNTIME_LOGGED
+    if _GPU_RUNTIME_LOGGED or settings.get("app", {}).get("deployment") != "huggingface":
+        return
+    _GPU_RUNTIME_LOGGED = True
+
+
+def _avoid_unreported_today_timing(timeline: str, *source_texts: str) -> str:
+    """Avoid presenting invented same-day timing when the user did not report it."""
+    if any(_RECENT_TIMING_RE.search(text or "") for text in source_texts):
+        return timeline
+    return re.sub(r"\bStarted today\b", "Timing not specified", timeline, flags=re.IGNORECASE)
+
+    print(
+        "[gpu-check] "
+        f"backend={canonical_backend(model_cfg.get('backend', 'ollama'))} "
+        f"preset={model_cfg.get('selected_preset', '')} "
+        f"n_gpu_layers={model_cfg.get('n_gpu_layers', '')} "
+        f"CUDA_VISIBLE_DEVICES={os.getenv('CUDA_VISIBLE_DEVICES', '')!r}",
+        flush=True,
+    )
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,driver_version",
+                "--format=csv,noheader",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except Exception as exc:
+        print(f"[gpu-check] nvidia-smi unavailable: {exc}", flush=True)
+        return
+
+    if result.returncode == 0:
+        print(f"[gpu-check] nvidia-smi={result.stdout.strip()}", flush=True)
+    else:
+        print(f"[gpu-check] nvidia-smi failed: {result.stderr.strip()}", flush=True)
+
+
 def model_download_status(model_preset_id: str):
-    """Return model status text and download-button visibility for Settings."""
+    """Return model status text and download-button visibility for internal tools."""
     model_settings = resolve_model_settings(settings, model_preset_id)
     model_cfg = model_settings.get("model", {})
     backend = canonical_backend(model_cfg.get("backend", "ollama"))
@@ -159,12 +222,6 @@ def model_download_status(model_preset_id: str):
     return f"**Ready.** The configured {backend} backend will handle model access.", gr.update(visible=False)
 
 
-def model_selection_details(model_preset_id: str):
-    """Return description, status, and download visibility for the selected model."""
-    status, download_visibility = model_download_status(model_preset_id)
-    return model_preset_details(model_preset_id), status, download_visibility
-
-
 def download_selected_model(model_preset_id: str):
     """Download the selected Ollama model after user confirmation via button click."""
     model_settings = resolve_model_settings(settings, model_preset_id)
@@ -183,13 +240,11 @@ def download_selected_model(model_preset_id: str):
     return f"**Ready.** {model_name} is available locally. Ollama status: {status}.", gr.update(visible=False)
 
 
+@_with_zero_gpu
 def run_inference(
     symptoms: str,
     notes: str,
     medications: str,
-    model_preset_id: str = "",
-    context_length: str = "4096",
-    temperature: str = "0.3",
 ):
     """Run one LLM inference pass and return the three report sections."""
     errors = validate_inputs(symptoms=symptoms, notes=notes, medications=medications)
@@ -197,8 +252,9 @@ def run_inference(
         error_msg = "\n".join(errors)
         return error_msg, error_msg, error_msg
 
-    model_settings = _model_settings_for_selection(model_preset_id, context_length, temperature)
+    model_settings = _model_settings_for_selection()
     model_cfg = model_settings.get("model", {})
+    _log_gpu_runtime_once(model_cfg)
     backend = canonical_backend(model_cfg.get("backend", "ollama"))
     model_name = model_cfg.get("name", "medgemma1.5:4b")
     if backend == "ollama":
@@ -210,11 +266,43 @@ def run_inference(
             error_msg = f"**Ollama unavailable.** {exc}"
             return error_msg, error_msg, error_msg
 
+    model_start = time.perf_counter()
     model = get_model(model_settings)
+    model_elapsed = time.perf_counter() - model_start
 
-    report_prompt = build_prep_report_prompt(symptoms, notes, medications)
-    report_raw = model.generate_report(report_prompt)
-    return parse_prep_report(report_raw)
+    timeline_prompt = build_timeline_prompt(symptoms, notes, medications)
+    questions_prompt = build_questions_prompt(symptoms, notes, medications)
+    relevant_prompt = build_relevant_info_prompt(symptoms, notes, medications)
+
+    generate_start = time.perf_counter()
+    timeline_raw = model.generate_report(timeline_prompt)
+    questions_raw = model.generate_report(questions_prompt)
+    relevant_raw = model.generate_report(relevant_prompt)
+    generate_elapsed = time.perf_counter() - generate_start
+    output_chars = len(timeline_raw) + len(questions_raw) + len(relevant_raw)
+    if settings.get("app", {}).get("deployment") == "huggingface":
+        print(
+            "[timing] "
+            f"model_ready_s={model_elapsed:.2f} "
+            f"generate_s={generate_elapsed:.2f} "
+            f"output_chars={output_chars}",
+            flush=True,
+        )
+    timeline = clean_section_output(timeline_raw, max_items=8)
+    timeline = _avoid_unreported_today_timing(timeline, symptoms, notes)
+
+    return (
+        timeline,
+        clean_section_output(questions_raw, max_items=5),
+        clean_section_output(
+            relevant_raw,
+            max_items=4,
+            required_suffix=(
+                "- This is informational only and not a substitute for "
+                "professional medical advice."
+            ),
+        ),
+    )
 
 
 def add_medication_entry(medication_name: str, instructions: str, current_medications: str, all_choices: list = None):
@@ -224,7 +312,7 @@ def add_medication_entry(medication_name: str, instructions: str, current_medica
     current_medications = (current_medications or "").strip()
 
     if not medication_name and not instructions:
-        return current_medications, "", "", gr.update(choices=all_choices[:8] if all_choices else [], value=None)
+        return current_medications, "", "", gr.update(choices=all_choices or [], value=None)
 
     if medication_name and instructions:
         entry = f"{medication_name} - {instructions}"
@@ -232,7 +320,7 @@ def add_medication_entry(medication_name: str, instructions: str, current_medica
         entry = medication_name or instructions
 
     updated = f"{current_medications}\n{entry}".strip() if current_medications else entry
-    return updated, "", "", gr.update(choices=all_choices[:8] if all_choices else [], value=None)
+    return updated, "", "", gr.update(choices=all_choices or [], value=None)
 
 
 def clear_all_inputs(all_choices: list):
@@ -243,7 +331,7 @@ def clear_all_inputs(all_choices: list):
         "",  # medications
         "",  # medication_name
         "",  # medication_instructions
-        gr.update(choices=all_choices[:8] if all_choices else [], value=None),  # medication_picker
+        gr.update(choices=all_choices or [], value=None),  # medication_picker
         DEFAULT_OUTPUT,  # timeline_output
         DEFAULT_OUTPUT,  # questions_output
         DEFAULT_OUTPUT,  # relevant_output
@@ -255,24 +343,17 @@ def populate_medication_name(selected_medication: str, current_name: str):
     return (selected_medication or current_name or "").strip()
 
 
+def filter_medication_picker_choices(all_choices: list[str], evt: gr.KeyUpData):
+    """Return fuzzy medication choices using the dropdown's current typed text."""
+    return gr.update(choices=filter_medication_choices(evt.input_value, all_choices))
+
+
 def create_ui() -> gr.Blocks:
     app_cfg = settings.get("app", {})
     model_cfg = settings.get("model", {})
     backend = model_cfg.get("backend", "ollama")
-    model_preset_choices = get_model_preset_choices(settings, backend)
     selected_model_preset_id = get_default_model_preset_id(settings, backend)
-    if not selected_model_preset_id:
-        model_preset_choices = [("Custom configured model", "")] + model_preset_choices
-    selected_model_settings = resolve_model_settings(settings, selected_model_preset_id)
-    selected_model_cfg = selected_model_settings.get("model", {})
-    model_preset_summary = model_preset_details(selected_model_preset_id)
-    initial_model_status, initial_download_visibility = model_download_status(selected_model_preset_id)
-    context_length = _context_choice_value(
-        selected_model_cfg.get("context_length", model_cfg.get("context_length", 4096))
-    )
-    temperature = _temperature_choice_value(
-        selected_model_cfg.get("temperature", model_cfg.get("temperature", 0.3))
-    )
+    selected_model_settings = _model_settings_for_selection(selected_model_preset_id)
     all_medication_choices = load_medication_choices()
     medication_summary = medication_index_summary()
     deployment = app_cfg.get("deployment", "local")
@@ -328,8 +409,7 @@ def create_ui() -> gr.Blocks:
                     gr.HTML(
                         """
                         <div class="pane-heading">
-                            <p class="section-kicker">Input</p>
-                            <h2>Appointment details</h2>
+                            <h2>Tell us about your visit</h2>
                         </div>
                         """
                     )
@@ -356,7 +436,7 @@ def create_ui() -> gr.Blocks:
                     medication_picker = gr.Dropdown(
                         label="Find a Medication",
                         show_label=False,
-                        choices=all_medication_choices[:8],  # Show first 8 initially for performance
+                        choices=all_medication_choices,
                         value=None,
                         filterable=True,
                         allow_custom_value=True,
@@ -366,7 +446,7 @@ def create_ui() -> gr.Blocks:
                     medication_name = gr.Textbox(
                         label="Medication Name",
                         show_label=False,
-                        placeholder="Select from RxTerms above, or type a medication, vitamin, or supplement",
+                        placeholder="Select a medication above, or type any medication, vitamin, or supplement",
                         lines=1,
                         max_lines=2,
                         elem_classes=["apple-input"],
@@ -410,8 +490,7 @@ def create_ui() -> gr.Blocks:
                     gr.HTML(
                         """
                         <div class="pane-heading">
-                            <p class="section-kicker">Output</p>
-                            <h2>Prep report</h2>
+                            <h2>Your appointment prep</h2>
                         </div>
                         """
                     )
@@ -435,65 +514,6 @@ def create_ui() -> gr.Blocks:
                                 elem_classes=["report-output"],
                             )
 
-        with gr.Tab("Settings", elem_classes=["main-tabs"]):
-            with gr.Column(elem_classes=["settings-tile"]):
-                gr.HTML(
-                    """
-                    <div>
-                        <p class="section-kicker">Configuration</p>
-                        <h2>Settings</h2>
-                    </div>
-                    """
-                )
-                gr.HTML('<p class="input-label">Model</p>')
-                model_preset = gr.Dropdown(
-                    label="Model",
-                    show_label=False,
-                    choices=model_preset_choices,
-                    value=selected_model_preset_id,
-                    filterable=False,
-                    allow_custom_value=False,
-                    elem_classes=["apple-input", "model-picker"],
-                )
-                model_preset_helper = gr.Markdown(
-                    value=model_preset_summary,
-                    elem_classes=["fine-print", "model-helper"],
-                )
-                model_status = gr.Markdown(
-                    value=initial_model_status,
-                    elem_classes=["fine-print", "model-status"],
-                )
-                download_model_btn = gr.Button(
-                    DOWNLOAD_MODEL_BUTTON_LABEL,
-                    variant="secondary",
-                    elem_classes=["secondary-pill", "download-model-button"],
-                    visible=initial_download_visibility.get("visible", False),
-                )
-                with gr.Row(elem_classes=["settings-controls"]):
-                    with gr.Column(scale=1):
-                        gr.HTML('<p class="input-label">Context</p>')
-                        context_choice = gr.Dropdown(
-                            label="Context",
-                            show_label=False,
-                            choices=CONTEXT_CHOICES,
-                            value=context_length,
-                            filterable=False,
-                            allow_custom_value=False,
-                            elem_classes=["apple-input", "settings-picker"],
-                        )
-                    with gr.Column(scale=1):
-                        gr.HTML('<p class="input-label">Temperature</p>')
-                        temperature_choice = gr.Dropdown(
-                            label="Temperature",
-                            show_label=False,
-                            choices=TEMPERATURE_CHOICES,
-                            value=temperature,
-                            filterable=False,
-                            allow_custom_value=False,
-                            elem_classes=["apple-input", "settings-picker"],
-                        )
-                gr.HTML(f'<p class="fine-print">Backend: {backend}. Configure available models in config/settings.yaml.</p>')
-
         with gr.Tab("About", elem_classes=["main-tabs"]):
             gr.HTML(
                 f"""
@@ -505,51 +525,41 @@ def create_ui() -> gr.Blocks:
                         It is for informational and organizational purposes only, not diagnosis,
                         treatment, or a substitute for professional medical advice.
                     </p>
+                    <p class="about-meta">
+                        Source code:
+                        <a href="https://github.com/bisonbet/medical-appt-prep" target="_blank" rel="noopener noreferrer">
+                            GitHub repository
+                        </a>
+                    </p>
+                    <p class="about-meta">AI assisted by Codex.</p>
                 </section>
                 """
             )
 
         submit_btn.click(
             fn=run_inference,
-            inputs=[symptoms, notes, medications, model_preset, context_choice, temperature_choice],
+            inputs=[symptoms, notes, medications],
             outputs=[timeline_output, questions_output, relevant_output],
             api_name="generate",
+            concurrency_limit=1,
+            concurrency_id="llama-cpp-gpu",
             api_visibility="public",
-        )
-        model_preset.change(
-            fn=model_selection_details,
-            inputs=[model_preset],
-            outputs=[model_preset_helper, model_status, download_model_btn],
-            api_visibility="private",
-        )
-        download_model_btn.click(
-            fn=download_selected_model,
-            inputs=[model_preset],
-            outputs=[model_status, download_model_btn],
-            api_visibility="private",
         )
         # Create a state variable to hold all medication choices for filtering
         medication_choices_state = gr.State(all_medication_choices)
-        
-        def handle_medication_change(selected_value, current_name, all_choices):
-            """Handle medication picker change: populate name field and filter choices."""
-            # Populate the medication name field
-            name_result = (selected_value or current_name or "").strip()
-            
-            # Filter choices based on current input
-            if selected_value and selected_value.strip():
-                query_lower = selected_value.strip().casefold()
-                matches = [choice for choice in all_choices if query_lower in choice.casefold()]
-                filtered_choices = matches[:8]
-            else:
-                filtered_choices = all_choices[:8]
-            
-            return name_result, gr.update(choices=filtered_choices)
-        
+
+        medication_picker.key_up(
+            fn=filter_medication_picker_choices,
+            inputs=[medication_choices_state],
+            outputs=[medication_picker],
+            show_progress="hidden",
+            trigger_mode="always_last",
+            api_visibility="private",
+        )
         medication_picker.change(
-            fn=handle_medication_change,
-            inputs=[medication_picker, medication_name, medication_choices_state],
-            outputs=[medication_name, medication_picker],
+            fn=populate_medication_name,
+            inputs=[medication_picker, medication_name],
+            outputs=[medication_name],
             api_visibility="private",
         )
         add_medication_btn.click(

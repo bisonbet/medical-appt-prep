@@ -11,6 +11,8 @@ from __future__ import annotations
 import abc
 import os
 import json
+import re
+import threading
 import urllib.request
 import urllib.error
 from functools import lru_cache
@@ -35,6 +37,7 @@ except ImportError:
 
 _HF_MODEL: Any | None = None
 _HF_PROCESSOR: Any | None = None
+_MODEL_FACTORY_LOCK = threading.Lock()
 
 
 def list_ollama_models(base_url: str = "http://localhost:11434", timeout: int = 5) -> set[str]:
@@ -103,7 +106,7 @@ class BaseLLM(abc.ABC):
         ...
 
     def generate_report(self, prompt: str) -> str:
-        """Run one report-generation inference call."""
+        """Run one report-generation inference call for a prompt."""
         return self.generate(prompt)
 
     @abc.abstractmethod
@@ -199,14 +202,22 @@ class LlamaCppModel(BaseLLM):
 
     def __init__(
         self,
-        model_path: str,
+        model_path: str = "",
+        model_repo_id: str = "",
+        model_filename: str = "",
         temperature: float = 0.3,
         context_length: int = 4096,
         max_new_tokens: int = 2048,
         n_gpu_layers: int = 0,
+        n_batch: int = 512,
+        n_ubatch: int = 512,
+        flash_attn: bool = False,
+        op_offload: bool | None = None,
+        swa_full: bool | None = None,
         system_prompt: str = "",
     ) -> None:
         try:
+            import llama_cpp  # type: ignore[import]
             from llama_cpp import Llama  # type: ignore[import]
         except ImportError as exc:
             raise ImportError(
@@ -217,12 +228,72 @@ class LlamaCppModel(BaseLLM):
         self.context_length = context_length
         self.max_new_tokens = max_new_tokens
         self.system_prompt = system_prompt
+        self.model_name = model_repo_id or model_path
+        self._warmed = False
+        self._completion_lock = threading.Lock()
+
+        if model_repo_id and model_filename:
+            model_path = self._download_hub_gguf(model_repo_id, model_filename)
+        if not model_path:
+            raise ValueError("llama_cpp requires either model_path or model_repo_id/model_filename.")
+
+        self.model_path = model_path
+        supports_gpu_fn = getattr(llama_cpp, "llama_supports_gpu", None)
+        supports_gpu = supports_gpu_fn() if callable(supports_gpu_fn) else "unknown"
+        verbose = os.getenv("LLAMA_CPP_VERBOSE", "").strip().lower() in {"1", "true", "yes"}
+        print(
+            "[llama-cpp-check] "
+            f"supports_gpu={supports_gpu} "
+            f"n_gpu_layers={n_gpu_layers} "
+            f"n_ctx={context_length} "
+            f"n_batch={n_batch} "
+            f"n_ubatch={n_ubatch} "
+            f"flash_attn={flash_attn} "
+            f"op_offload={op_offload} "
+            f"swa_full={swa_full} "
+            f"verbose={verbose}",
+            flush=True,
+        )
         self._llm = Llama(
             model_path=model_path,
             n_ctx=context_length,
             n_gpu_layers=n_gpu_layers,
-            verbose=False,
+            n_batch=n_batch,
+            n_ubatch=n_ubatch,
+            flash_attn=flash_attn,
+            op_offload=op_offload,
+            swa_full=swa_full,
+            verbose=verbose,
         )
+
+    @staticmethod
+    def _download_hub_gguf(repo_id: str, filename: str) -> str:
+        try:
+            from huggingface_hub import hf_hub_download, snapshot_download
+        except ImportError as exc:
+            raise ImportError(
+                "Loading llama_cpp models from Hugging Face requires huggingface-hub."
+            ) from exc
+
+        token = os.getenv("HF_TOKEN") or None
+        split_pattern = re.sub(r"-\d{5}-of-\d{5}(\.gguf)$", r"-*of-*\1", filename)
+        if split_pattern != filename:
+            snapshot_dir = snapshot_download(
+                repo_id=repo_id,
+                allow_patterns=[split_pattern],
+                token=token,
+            )
+            return os.path.join(snapshot_dir, filename)
+
+        return hf_hub_download(repo_id=repo_id, filename=filename, token=token)
+
+    # ------------------------------------------------------------------
+    def warmup(self) -> None:
+        with self._completion_lock:
+            if self._warmed:
+                return
+            self._llm.create_completion("Warmup:", max_tokens=1, temperature=0.0)
+            self._warmed = True
 
     # ------------------------------------------------------------------
     def generate(self, prompt: str) -> str:
@@ -231,11 +302,13 @@ class LlamaCppModel(BaseLLM):
             messages.append({"role": "system", "content": self.system_prompt})
         messages.append({"role": "user", "content": prompt})
 
-        response = self._llm.create_chat_completion(
-            messages=messages,
-            temperature=self.temperature,
-            max_tokens=self.max_new_tokens,
-        )
+        with self._completion_lock:
+            response = self._llm.create_chat_completion(
+                messages=messages,
+                temperature=self.temperature,
+                max_tokens=self.max_new_tokens,
+            )
+            self._warmed = True
         return response["choices"][0]["message"]["content"].strip()
 
     # ------------------------------------------------------------------
@@ -419,9 +492,23 @@ def _model_cfg_key(settings_json: str) -> str:
     return settings_json
 
 
+def _optional_bool(value: Any, default: bool | None = None) -> bool | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 def get_model(settings: dict) -> BaseLLM:
     """Instantiate the correct backend from settings dict."""
-    return _get_model_cached(json.dumps(settings, sort_keys=True))
+    with _MODEL_FACTORY_LOCK:
+        return _get_model_cached(json.dumps(settings, sort_keys=True))
 
 
 @lru_cache(maxsize=4)
@@ -442,16 +529,26 @@ def _get_model_cached(settings_json: str) -> BaseLLM:
         )
     elif backend in ("llama_cpp", "llama-cpp", "llamacpp"):
         model_path = model_cfg.get("model_path", "")
-        if not model_path:
+        model_repo_id = model_cfg.get("model_repo_id", "")
+        model_filename = model_cfg.get("model_filename", "")
+        if not model_path and not (model_repo_id and model_filename):
             raise ValueError(
-                "model.model_path must be set in config/settings.yaml when using llama_cpp backend"
+                "model.model_path or model.model_repo_id/model.model_filename must be set "
+                "when using llama_cpp backend"
             )
         return LlamaCppModel(
             model_path=model_path,
+            model_repo_id=model_repo_id,
+            model_filename=model_filename,
             temperature=float(model_cfg.get("temperature", 0.3)),
             context_length=int(model_cfg.get("context_length", 4096)),
             max_new_tokens=max_new_tokens,
             n_gpu_layers=int(model_cfg.get("n_gpu_layers", 0)),
+            n_batch=int(model_cfg.get("n_batch", 512)),
+            n_ubatch=int(model_cfg.get("n_ubatch", 512)),
+            flash_attn=bool(_optional_bool(model_cfg.get("flash_attn"), False)),
+            op_offload=_optional_bool(model_cfg.get("op_offload"), None),
+            swa_full=_optional_bool(model_cfg.get("swa_full"), None),
             system_prompt=_SYSTEM_PROMPT,
         )
     elif backend in ("hf_transformers", "huggingface", "transformers"):

@@ -10,9 +10,29 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("APP_DEPLOYMENT", "huggingface")
-os.environ.setdefault("MODEL_BACKEND", "hf_transformers")
-os.environ.setdefault("MODEL_PRESET", "medgemma-4b")
-os.environ.setdefault("MODEL_NAME", "google/medgemma-1.5-4b-it")
+
+HOSTED_LLAMA_CPP_DEFAULTS = {
+    "MODEL_BACKEND": "llama_cpp",
+    "MODEL_PRESET": "medgemma-4b",
+    "LLAMA_CPP_MODEL_REPO_ID": "unsloth/medgemma-1.5-4b-it-GGUF",
+    "LLAMA_CPP_MODEL_FILENAME": "medgemma-1.5-4b-it-Q4_K_M.gguf",
+    "LLAMA_CPP_N_GPU_LAYERS": "-1",
+    "LLAMA_CPP_N_BATCH": "2048",
+    "LLAMA_CPP_N_UBATCH": "1024",
+    "LLAMA_CPP_FLASH_ATTN": "1",
+    "LLAMA_CPP_OP_OFFLOAD": "1",
+    "LLAMA_CPP_SWA_FULL": "0",
+    "MODEL_CONTEXT_LENGTH": "8192",
+    "MODEL_MAX_NEW_TOKENS": "256",
+    "MODEL_TEMPERATURE": "0.3",
+}
+
+if os.getenv("SPACE_USE_ENV_MODEL_CONFIG", "").strip().lower() in {"1", "true", "yes"}:
+    for key, value in HOSTED_LLAMA_CPP_DEFAULTS.items():
+        os.environ.setdefault(key, value)
+else:
+    for key, value in HOSTED_LLAMA_CPP_DEFAULTS.items():
+        os.environ[key] = value
 
 from shared_app import APPLE_CSS_PATH, APPLE_THEME, THEME_MODE_HEAD, create_ui, settings  # noqa: E402
 

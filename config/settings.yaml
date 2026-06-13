@@ -24,28 +24,36 @@ model:
           name: medgemma1.5:4b
         hf_transformers:
           name: google/medgemma-1.5-4b-it
-    - id: medgemma-27b
-      label: MedGemma 27B
-      description: Larger MedGemma option for more capable medical reasoning when hardware allows.
-      backends:
-        ollama:
-          name: medgemma:27b
-        hf_transformers:
-          name: google/medgemma-27b-it
-
+        llama_cpp:
+          name: unsloth/medgemma-1.5-4b-it-GGUF
+          model_repo_id: unsloth/medgemma-1.5-4b-it-GGUF
+          model_filename: medgemma-1.5-4b-it-Q4_K_M.gguf
+          n_gpu_layers: -1
+          n_batch: 2048
+          n_ubatch: 1024
+          flash_attn: true
+          op_offload: true
+          swa_full: false
   # --- llama-cpp-python settings ---
   # Uncomment and set this if using backend: llama_cpp
   # model_path: /path/to/your/model.gguf
+  # model_repo_id: unsloth/medgemma-1.5-4b-it-GGUF
+  # model_filename: medgemma-1.5-4b-it-Q4_K_M.gguf
   # n_gpu_layers: 0  # Set > 0 to offload layers to GPU (requires GPU build)
+  # n_batch: 2048
+  # n_ubatch: 1024
+  # flash_attn: true
+  # op_offload: true
+  # swa_full: false
 
   # --- Hosted OpenAI-compatible settings (Nebius/serverless, experimental) ---
   # openai_compatible_base_url: https://your-endpoint.example.com
   # openai_compatible_api_key: set via OPENAI_COMPATIBLE_API_KEY
 
   # --- Shared settings ---
-  context_length: 4096   # Max tokens in context window
+  context_length: 8192   # Max tokens in context window
   temperature: 0.3       # Lower = more deterministic, higher = more creative
-  max_new_tokens: 2048   # Max tokens to generate per combined report
+  max_new_tokens: 256    # Max tokens to generate per section
 
 app:
   # Deployment: "local", "huggingface", or "hosted"
