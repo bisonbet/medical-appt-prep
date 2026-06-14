@@ -6,6 +6,7 @@ Main Gradio application entry point.
 import os
 import re
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -36,12 +37,15 @@ _RECENT_TIMING_RE = re.compile(
     r"\b(today|tonight|this morning|this afternoon|this evening|yesterday|last night)\b",
     flags=re.IGNORECASE,
 )
+_MODEL_WARMUP_LOCK = threading.Lock()
+_MODEL_WARMUP_STARTED = False
 
 
 DEFAULT_OUTPUT = "_Your prep report will appear here._"
 APPLE_CSS_PATH = "assets/apple.css"
 CUSTOM_UI_CSS_PATH = "assets/server.css"
 CUSTOM_UI_JS_PATH = "assets/server.js"
+CUSTOM_UI_ASSET_VERSION = "2026-06-14-acknowledgements"
 ROBOT_IMAGE_PATH = "assets/assistant-robot.jpeg"
 APPLE_THEME = gr.themes.Soft()
 DEFAULT_CONTEXT_LENGTH = "8192"
@@ -167,6 +171,56 @@ def _log_gpu_runtime_once(model_cfg: dict) -> None:
     if _GPU_RUNTIME_LOGGED or settings.get("app", {}).get("deployment") != "huggingface":
         return
     _GPU_RUNTIME_LOGGED = True
+
+
+def _model_warmup_enabled() -> bool:
+    if os.getenv("SPACE_DISABLE_MODEL_WARMUP", "").strip().lower() in {"1", "true", "yes"}:
+        return False
+    deployment = settings.get("app", {}).get("deployment")
+    return deployment == "huggingface" or os.getenv("SPACE_ENABLE_MODEL_WARMUP", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _warmup_model_worker(reason: str = "startup") -> None:
+    try:
+        model_settings = _model_settings_for_selection()
+        model_cfg = model_settings.get("model", {})
+        backend = canonical_backend(model_cfg.get("backend", "ollama"))
+        print(
+            "[warmup] starting "
+            f"reason={reason} "
+            f"backend={backend} "
+            f"preset={model_cfg.get('selected_preset', '')} "
+            f"model={model_cfg.get('name', '')}",
+            flush=True,
+        )
+        model = get_model(model_settings)
+        warmup = getattr(model, "warmup", None)
+        if callable(warmup):
+            warmup()
+        else:
+            model.health_check()
+        print("[warmup] ready", flush=True)
+    except Exception as exc:
+        print(f"[warmup] failed: {exc}", flush=True)
+
+
+def warmup_model_async(reason: str = "startup") -> bool:
+    """Start hosted model download/load/warmup in the background once."""
+    global _MODEL_WARMUP_STARTED
+    if not _model_warmup_enabled():
+        return False
+    with _MODEL_WARMUP_LOCK:
+        if _MODEL_WARMUP_STARTED:
+            return False
+        _MODEL_WARMUP_STARTED = True
+    target = _with_zero_gpu(_warmup_model_worker)
+    thread = threading.Thread(target=target, args=(reason,), daemon=True)
+    thread.start()
+    return True
 
 
 def _avoid_unreported_today_timing(timeline: str, *source_texts: str) -> str:
@@ -360,8 +414,8 @@ def _page_head(title: str = "Medical Appointment Prep") -> str:
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
-    <link rel="stylesheet" href="/assets/server.css" />
-    <script type="module" src="/assets/server.js"></script>
+    <link rel="stylesheet" href="/assets/server.css?v={CUSTOM_UI_ASSET_VERSION}" />
+    <script type="module" src="/assets/server.js?v={CUSTOM_UI_ASSET_VERSION}"></script>
   </head>"""
 
 
@@ -414,14 +468,19 @@ def _custom_frontend_html() -> str:
             <div class="trust-strip" aria-label="Privacy and safety notes">
               <span>Informational only</span>
               <span>No diagnosis</span>
+              <span>MedGemma 4B</span>
+              <span>llama.cpp ready</span>
             </div>
           </div>
         </div>
 
         <form class="prep-form" id="prep-form">
           <div class="form-heading">
-            <p class="eyebrow">Step 1</p>
-            <h2>Tell me what you want your clinician to know.</h2>
+            <div>
+              <p class="eyebrow">Step 1</p>
+              <h2>Tell me what you want your clinician to know.</h2>
+            </div>
+            <button class="demo-action" type="button" id="demo-button">Click here for a demo</button>
           </div>
 
           <label class="field-label" for="symptoms">What symptoms or concerns are you having?</label>
@@ -499,26 +558,26 @@ def _custom_frontend_html() -> str:
           <div class="export-heading">
             <div>
               <p class="eyebrow">Take it with you</p>
-              <h3 id="export-title">Share or save your prep</h3>
+              <h3 id="export-title">Share or save the full prep report</h3>
             </div>
-            <p id="export-status" role="status">Generate a report to enable exports.</p>
+            <p id="export-status" role="status">Generate a report to enable full-report exports.</p>
           </div>
           <div class="export-actions" aria-label="Export options">
             <button type="button" class="export-action primary-export" id="email-report" disabled>
               <span class="export-icon" aria-hidden="true">@</span>
-              <span>Email</span>
+              <span>Email Full</span>
             </button>
             <button type="button" class="export-action" id="pdf-report" disabled>
               <span class="export-icon" aria-hidden="true">PDF</span>
-              <span>Export PDF</span>
+              <span>Full PDF</span>
             </button>
             <button type="button" class="export-action" id="print-report" disabled>
               <span class="export-icon" aria-hidden="true">PRN</span>
-              <span>Print</span>
+              <span>Print Full</span>
             </button>
             <button type="button" class="export-action" id="copy-report" disabled>
               <span class="export-icon" aria-hidden="true">TXT</span>
-              <span>Copy All</span>
+              <span>Copy Full</span>
             </button>
             <button type="button" class="export-action" id="portal-copy" disabled>
               <span class="export-icon" aria-hidden="true">PT</span>
@@ -526,12 +585,12 @@ def _custom_frontend_html() -> str:
             </button>
             <button type="button" class="export-action" id="download-report" disabled>
               <span class="export-icon" aria-hidden="true">DL</span>
-              <span>Download Text</span>
+              <span>Download Full</span>
             </button>
           </div>
           <p class="export-note">
-            Email, downloads, and copied text may include health details. Review before sending,
-            saving, or pasting into another service.
+            Export actions include the symptoms, notes, medications, timeline, questions,
+            and relevant info. Review before sending, saving, or pasting into another service.
           </p>
         </div>
       </section>
@@ -560,6 +619,8 @@ def _about_frontend_html() -> str:
           <span>Informational only</span>
           <span>No diagnosis</span>
           <span>Patient-controlled export</span>
+          <span>4B small-model build</span>
+          <span>llama.cpp Space runtime</span>
         </div>
       </section>
 
@@ -582,15 +643,39 @@ def _about_frontend_html() -> str:
           </p>
         </article>
         <article class="about-card source-card">
-          <p class="eyebrow">Source</p>
-          <h2>Project repository</h2>
+          <p class="eyebrow">Hackathon fit</p>
+          <h2>Small model, custom Gradio UI</h2>
           <p>
-            The source code is maintained on GitHub and will be public soon.
+            The app is designed for the Backyard AI track: a specific appointment-prep
+            workflow, a custom Gradio Server frontend, and a MedGemma 1.5 4B GGUF
+            runtime through llama.cpp in the hosted Space.
           </p>
           <a class="github-link" href="{GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">
             Open GitHub repository
           </a>
         </article>
+      </section>
+
+      <section class="acknowledgements" aria-labelledby="acknowledgements-title">
+        <div>
+          <p class="eyebrow">Acknowledgements</p>
+          <h2 id="acknowledgements-title">Thank you to the Build Small Hackathon sponsors.</h2>
+          <p>
+            This project was built for the Hugging Face Build Small Hackathon.
+            Thanks to the sponsors for supporting small-model experiments, and
+            especially to OpenAI's Codex for helping shape, test, and ship the app.
+          </p>
+        </div>
+        <div class="sponsor-links" aria-label="Sponsor links">
+          <a href="https://huggingface.co/" target="_blank" rel="noopener noreferrer">Hugging Face</a>
+          <a href="https://openai.com/codex/" target="_blank" rel="noopener noreferrer">OpenAI Codex</a>
+          <a href="https://www.nvidia.com/" target="_blank" rel="noopener noreferrer">NVIDIA</a>
+          <a href="https://modal.com/" target="_blank" rel="noopener noreferrer">Modal</a>
+          <a href="https://www.openbmb.cn/" target="_blank" rel="noopener noreferrer">OpenBMB</a>
+          <a href="https://cohere.com/" target="_blank" rel="noopener noreferrer">Cohere</a>
+          <a href="https://www.jetbrains.com/" target="_blank" rel="noopener noreferrer">JetBrains</a>
+          <a href="https://blackforestlabs.ai/" target="_blank" rel="noopener noreferrer">Black Forest Labs</a>
+        </div>
       </section>
     </main>
   </body>
@@ -847,6 +932,24 @@ def create_ui() -> gr.Blocks:
                         </a>
                     </p>
                     <p class="about-meta">AI assisted by Codex.</p>
+                    <hr />
+                    <h3>Acknowledgements</h3>
+                    <p>
+                        Built for the Hugging Face Build Small Hackathon. Thank you to the
+                        sponsors supporting small-model work, especially
+                        <a href="https://openai.com/codex/" target="_blank" rel="noopener noreferrer">OpenAI Codex</a>.
+                    </p>
+                    <p class="about-meta">
+                        Sponsors:
+                        <a href="https://huggingface.co/" target="_blank" rel="noopener noreferrer">Hugging Face</a>,
+                        <a href="https://openai.com/codex/" target="_blank" rel="noopener noreferrer">OpenAI Codex</a>,
+                        <a href="https://www.nvidia.com/" target="_blank" rel="noopener noreferrer">NVIDIA</a>,
+                        <a href="https://modal.com/" target="_blank" rel="noopener noreferrer">Modal</a>,
+                        <a href="https://www.openbmb.cn/" target="_blank" rel="noopener noreferrer">OpenBMB</a>,
+                        <a href="https://cohere.com/" target="_blank" rel="noopener noreferrer">Cohere</a>,
+                        <a href="https://www.jetbrains.com/" target="_blank" rel="noopener noreferrer">JetBrains</a>,
+                        <a href="https://blackforestlabs.ai/" target="_blank" rel="noopener noreferrer">Black Forest Labs</a>.
+                    </p>
                 </section>
                 """
             )

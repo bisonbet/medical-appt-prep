@@ -14,9 +14,17 @@ pinned: false
 
 Hosted Gradio Space for the Medical Appointment Prep Assistant.
 
+Hackathon focus: Backyard AI appointment preparation with a custom Gradio Server
+UI, one-click fictional demo cases, full-report export actions, and a small
+MedGemma 1.5 4B GGUF model running through llama.cpp.
+
 The Space launches the custom `gradio.Server` interface by default: a warm
 HTML/CSS/JS frontend backed by Gradio's queued API. Set `APP_UI_MODE=blocks`
 only if you need the fallback Gradio Blocks interface.
+
+At startup, the Space begins a background llama.cpp model download/load/warmup
+so the first user request is less likely to pay the full cold-start cost. Set
+`SPACE_DISABLE_MODEL_WARMUP=1` to turn that off temporarily.
 
 Required Space secret:
 

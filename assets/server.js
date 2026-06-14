@@ -11,6 +11,7 @@ const fields = {
   suggestions: document.querySelector("#medication-suggestions"),
   form: document.querySelector("#prep-form"),
   addMedication: document.querySelector("#add-medication"),
+  demo: document.querySelector("#demo-button"),
   clear: document.querySelector("#clear-button"),
   generate: document.querySelector("#generate-button"),
   status: document.querySelector("#status-message"),
@@ -36,6 +37,40 @@ let lastReport = {
   questions: "",
   relevant: "",
 };
+let lastDemoIndex = -1;
+
+const demoCases = [
+  {
+    label: "headache visit",
+    symptoms: "Dull headache behind both eyes for about 10 days. It is usually worse late afternoon after computer work and sometimes comes with light sensitivity. Ibuprofen helps a little but it keeps coming back.",
+    notes: "Vision feels a little blurry by the end of the workday. Sleeping 5-6 hours recently. No recent head injury. Wants to ask whether this could relate to eyestrain, stress, blood pressure, or medication changes.",
+    medications: "Lisinopril - 10 mg once daily in the morning\nSertraline - 50 mg once daily\nIbuprofen - 400 mg as needed, used 3 times this week",
+  },
+  {
+    label: "knee pain visit",
+    symptoms: "Right knee pain for 3 weeks after increasing weekend pickleball. Pain is on the inside of the knee, worse going downstairs, and there is mild swelling after activity. Rest and ice help.",
+    notes: "No fall or major twist. Can walk but avoids longer walks. Wants to stay active and understand what exam findings, imaging, or physical therapy options might matter.",
+    medications: "Atorvastatin - 20 mg once nightly\nMetformin ER - 500 mg with dinner\nAcetaminophen - 500 mg as needed for knee pain",
+  },
+  {
+    label: "stomach symptoms visit",
+    symptoms: "Burning upper stomach discomfort most evenings for 2 months. Worse after tomato sauce, coffee, and late meals. Sometimes wakes up with sour taste in mouth.",
+    notes: "Started a new job schedule and eats dinner later. No known food allergies. Wants help describing patterns and asking what lifestyle changes, tests, or medication review might be appropriate.",
+    medications: "Levothyroxine - 75 mcg every morning before food\nOmeprazole - 20 mg as needed, used a few times this month\nCalcium carbonate antacid - as needed after meals",
+  },
+  {
+    label: "breathing follow-up",
+    symptoms: "Intermittent cough and chest tightness for 4 weeks, especially after climbing stairs or being around cold air. Albuterol helps within a few minutes. Symptoms are more noticeable at night.",
+    notes: "Seasonal allergies have been worse this month. No fever now. Wants to ask whether inhaler use, allergy control, or pulmonary testing should be reviewed.",
+    medications: "Albuterol inhaler - 2 puffs as needed\nFluticasone nasal spray - 1 spray each nostril daily\nCetirizine - 10 mg once daily",
+  },
+  {
+    label: "fatigue visit",
+    symptoms: "Low energy for about 6 weeks. Feels cold more often, has dry skin, and is having trouble concentrating in the afternoon. Symptoms are gradual rather than sudden.",
+    notes: "Work stress is higher, but sleep schedule is fairly consistent. Had thyroid medication adjusted last year. Wants a concise way to discuss fatigue, mood, sleep, and possible lab questions.",
+    medications: "Levothyroxine - 88 mcg every morning\nBupropion XL - 150 mg once daily\nVitamin D3 - 2000 IU daily",
+  },
+];
 
 function currentTheme() {
   const stored = localStorage.getItem(storageKey);
@@ -145,7 +180,7 @@ function setExportReady(isReady) {
   fields.exportButtons?.forEach((button) => {
     button.disabled = !isReady;
   });
-  setExportStatus(isReady ? "Ready to email, print, copy, or save." : "Generate a report to enable exports.");
+  setExportStatus(isReady ? "Ready to email, print, copy, or save the full report." : "Generate a report to enable full-report exports.");
 }
 
 function setLoading(isLoading) {
@@ -180,6 +215,40 @@ function reportSections() {
 
 function hasGeneratedReport() {
   return reportReady && reportSections().some(([, value]) => plainMarkdown(value));
+}
+
+function resetReportState(statusMessage) {
+  fields.timeline.innerHTML = renderMarkdown("Your timeline will appear here.");
+  fields.questions.innerHTML = renderMarkdown("Questions for your visit will appear here.");
+  fields.relevant.innerHTML = renderMarkdown("Relevant background information will appear here.");
+  lastReport = { timeline: "", questions: "", relevant: "" };
+  setExportReady(false);
+  setStatus(statusMessage || "Your report will appear after you generate it.");
+  selectTab("timeline");
+}
+
+function randomDemoIndex() {
+  if (demoCases.length < 2) {
+    return 0;
+  }
+  let nextIndex = Math.floor(Math.random() * demoCases.length);
+  if (nextIndex === lastDemoIndex) {
+    nextIndex = (nextIndex + 1) % demoCases.length;
+  }
+  lastDemoIndex = nextIndex;
+  return nextIndex;
+}
+
+function fillDemoCase() {
+  const demo = demoCases[randomDemoIndex()];
+  fields.symptoms.value = demo.symptoms;
+  fields.notes.value = demo.notes;
+  fields.medications.value = demo.medications;
+  fields.medicationName.value = "";
+  fields.medicationInstructions.value = "";
+  hideSuggestions();
+  resetReportState(`Demo loaded: ${demo.label}. Review or edit it, then generate the prep report.`);
+  fields.symptoms.focus();
 }
 
 function currentPrepText({ portal = false } = {}) {
@@ -227,7 +296,7 @@ function currentPrepText({ portal = false } = {}) {
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function reportHtml() {
+function reportHtml({ autoPrint = false } = {}) {
   const sections = reportSections()
     .map(([heading, value]) => `
       <section class="print-section">
@@ -251,6 +320,24 @@ function reportHtml() {
     : "";
   const symptoms = fields.symptoms.value.trim()
     ? `<section class="print-section print-context"><h2>Symptoms / Concerns</h2><pre>${escapeHtml(fields.symptoms.value.trim())}</pre></section>`
+    : "";
+
+  const printScript = autoPrint
+    ? `<script>
+      (() => {
+        function printWhenReady() {
+          window.setTimeout(() => {
+            window.focus();
+            window.print();
+          }, 150);
+        }
+        if (document.readyState === "complete") {
+          printWhenReady();
+        } else {
+          window.addEventListener("load", printWhenReady, { once: true });
+        }
+      })();
+    </script>`
     : "";
 
   return `<!doctype html>
@@ -356,6 +443,7 @@ function reportHtml() {
         <p class="disclaimer">This is informational only and not a substitute for professional medical advice.</p>
       </main>
     </article>
+    ${printScript}
   </body>
 </html>`;
 }
@@ -389,17 +477,32 @@ function openPrintReport({ pdf = false } = {}) {
   if (!ensureReportReady(pdf ? "Export PDF" : "Print")) {
     return;
   }
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    setExportStatus("Allow pop-ups to open the print window.");
-    return;
-  }
-  printWindow.document.open();
-  printWindow.document.write(reportHtml());
-  printWindow.document.close();
-  printWindow.focus();
-  setExportStatus(pdf ? "Choose Save as PDF in the print dialog." : "Print dialog opened.");
-  window.setTimeout(() => printWindow.print(), 250);
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.border = "0";
+  frame.style.height = "0";
+  frame.style.position = "fixed";
+  frame.style.right = "0";
+  frame.style.bottom = "0";
+  frame.style.width = "0";
+
+  const cleanup = () => window.setTimeout(() => frame.remove(), 1000);
+  const triggerPrint = () => {
+    const printFrame = frame.contentWindow;
+    if (!printFrame) {
+      cleanup();
+      return;
+    }
+    printFrame.addEventListener("afterprint", cleanup, { once: true });
+    window.setTimeout(cleanup, 60000);
+    printFrame.focus();
+    printFrame.print();
+  };
+
+  frame.addEventListener("load", () => window.setTimeout(triggerPrint, 150), { once: true });
+  frame.srcdoc = reportHtml();
+  document.body.appendChild(frame);
+  setExportStatus(pdf ? "Print dialog opening. Choose Save as PDF." : "Print dialog opening.");
 }
 
 function emailReport() {
@@ -563,14 +666,9 @@ if (fields.form) {
   fields.clear.addEventListener("click", () => {
     fields.form.reset();
     hideSuggestions();
-    fields.timeline.innerHTML = renderMarkdown("Your timeline will appear here.");
-    fields.questions.innerHTML = renderMarkdown("Questions for your visit will appear here.");
-    fields.relevant.innerHTML = renderMarkdown("Relevant background information will appear here.");
-    lastReport = { timeline: "", questions: "", relevant: "" };
-    setExportReady(false);
-    setStatus("Your report will appear after you generate it.");
-    selectTab("timeline");
+    resetReportState("Your report will appear after you generate it.");
   });
+  fields.demo.addEventListener("click", fillDemoCase);
   fields.emailReport.addEventListener("click", emailReport);
   fields.pdfReport.addEventListener("click", () => openPrintReport({ pdf: true }));
   fields.printReport.addEventListener("click", () => openPrintReport());

@@ -293,6 +293,65 @@ RELEVANT_INFO:
         self.assertFalse(button_update["visible"])
 
 
+class AppWarmupTests(unittest.TestCase):
+    def tearDown(self):
+        app._MODEL_WARMUP_STARTED = False
+        _get_model_cached.cache_clear()
+
+    def test_warmup_model_worker_calls_backend_warmup(self):
+        class FakeModel:
+            def __init__(self):
+                self.warmup = mock.Mock()
+
+            def health_check(self):
+                return True
+
+        fake_model = FakeModel()
+        model_settings = {
+            "model": {
+                "backend": "llama_cpp",
+                "selected_preset": "medgemma-4b",
+                "name": "demo-model",
+            }
+        }
+
+        with (
+            mock.patch("app._model_settings_for_selection", return_value=model_settings),
+            mock.patch("app.get_model", return_value=fake_model) as get_model_mock,
+        ):
+            app._warmup_model_worker("test")
+
+        get_model_mock.assert_called_once_with(model_settings)
+        fake_model.warmup.assert_called_once()
+
+    def test_warmup_model_async_skips_local_by_default(self):
+        app._MODEL_WARMUP_STARTED = False
+        with (
+            mock.patch.object(app, "settings", {"app": {"deployment": "local"}}),
+            mock.patch.dict("os.environ", {}, clear=True),
+            mock.patch("app.threading.Thread") as thread_cls,
+        ):
+            started = app.warmup_model_async("test")
+
+        self.assertFalse(started)
+        thread_cls.assert_not_called()
+
+    def test_warmup_model_async_starts_once_for_huggingface(self):
+        app._MODEL_WARMUP_STARTED = False
+        thread = mock.Mock()
+        with (
+            mock.patch.object(app, "settings", {"app": {"deployment": "huggingface"}}),
+            mock.patch("app.threading.Thread", return_value=thread) as thread_cls,
+        ):
+            first = app.warmup_model_async("space-startup")
+            second = app.warmup_model_async("space-startup")
+
+        self.assertTrue(first)
+        self.assertFalse(second)
+        thread_cls.assert_called_once()
+        thread.start.assert_called_once()
+
+
 class MedicationSearchTests(unittest.TestCase):
     def setUp(self):
         self.choices = [

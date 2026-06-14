@@ -14,12 +14,29 @@ Nebius later.
 
 - Gradio 6 web UI (runs in your browser)
 - Custom `gradio.Server` frontend for a warmer, non-technical appointment-prep experience
+- One-click fictional demo cases so reviewers can try the flow without inventing inputs
 - Separate focused generation calls fill each report tab: Timeline, Questions, Relevant Info
-- Export actions for email drafts, PDF/print, clipboard, portal copy, and text download
+- Full-report export actions for email drafts, PDF/print, clipboard, portal copy, and text download
+- Print/PDF export opens a printable full-report view and triggers the browser print dialog
 - Four LLM backend options: **Ollama**, **llama-cpp-python**, **Hugging Face Transformers**, or **OpenAI-compatible**
 - Uses MedGemma 1.5 4B by default, with model settings hidden from non-technical users
 - Local RxTerms medication autocomplete with custom entry fallback
+- Hugging Face Space startup warmup for the hosted llama.cpp model
 - Works on Windows, macOS, Linux, and Hugging Face Spaces
+
+## Hackathon Positioning
+
+This project is aimed at the Build Small Hackathon's **Backyard AI** track: it
+helps a real person prepare for a specific kind of stressful everyday task, a
+medical appointment, without trying to diagnose or choose treatment.
+
+The competition build is intentionally small-model first:
+
+- **Tiny Titan fit:** MedGemma 1.5 4B default model
+- **Llama Champion fit:** hosted Space path runs the GGUF model through `llama.cpp`
+- **Off-Brand / Custom UI fit:** custom `gradio.Server` frontend instead of default Blocks
+- **Local-first fit:** local desktop path uses Ollama or llama.cpp without cloud APIs
+- **Field Notes fit:** the app is designed to be explained as an appointment-prep workflow, not a medical-advice product
 
 ---
 
@@ -158,6 +175,9 @@ APP_DEPLOYMENT=huggingface
 
 The Space template lives in `deploy/huggingface-space/` and pins Gradio 6. It
 uses ZeroGPU for report generation and a CUDA-enabled `llama-cpp-python` wheel.
+On startup, the Space starts a background model preload/warmup so the first
+visitor is less likely to pay the full model download/load cost. Set
+`SPACE_DISABLE_MODEL_WARMUP=1` if you need to disable that behavior temporarily.
 
 ### OpenAI-Compatible / Nebius
 

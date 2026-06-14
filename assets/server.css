@@ -352,6 +352,10 @@ h3 {
 }
 
 .form-heading {
+  align-items: start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
   margin-bottom: 20px;
 }
 
@@ -441,7 +445,8 @@ textarea:focus {
 
 .primary-action,
 .secondary-action,
-.ghost-action {
+.ghost-action,
+.demo-action {
   align-items: center;
   border-radius: var(--radius);
   display: inline-flex;
@@ -467,6 +472,20 @@ textarea:focus {
   border: 1px solid var(--ink);
   color: var(--surface);
   min-width: 76px;
+}
+
+.demo-action {
+  background: color-mix(in srgb, var(--blue) 12%, var(--surface-strong));
+  border: 1px solid color-mix(in srgb, var(--blue) 34%, var(--line));
+  color: var(--blue);
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.demo-action:hover {
+  border-color: color-mix(in srgb, var(--blue) 58%, var(--line));
+  transform: translateY(-1px);
 }
 
 .ghost-action {
@@ -583,6 +602,55 @@ textarea:focus {
 .github-link:hover {
   background: var(--teal-dark);
   border-color: var(--teal-dark);
+}
+
+.acknowledgements {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--blue) 10%, transparent), transparent 48%),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 22px;
+  padding: 28px;
+}
+
+.acknowledgements h2 {
+  max-width: 760px;
+}
+
+.acknowledgements p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: 17px;
+  margin-bottom: 0;
+  max-width: 820px;
+}
+
+.sponsor-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sponsor-links a {
+  align-items: center;
+  background: color-mix(in srgb, var(--field) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 850;
+  min-height: 38px;
+  padding: 0 13px;
+  text-decoration: none;
+}
+
+.sponsor-links a:hover {
+  border-color: color-mix(in srgb, var(--teal) 52%, var(--line));
+  color: var(--teal-dark);
+  transform: translateY(-1px);
 }
 
 .results-heading {
@@ -830,6 +898,7 @@ a:focus-visible {
   .guide-copy,
   .about-hero,
   .about-card,
+  .acknowledgements,
   .prep-form,
   .results-shell {
     padding: 18px;
@@ -849,8 +918,13 @@ a:focus-visible {
   }
 
   .primary-action,
-  .ghost-action {
+  .ghost-action,
+  .demo-action {
     width: 100%;
+  }
+
+  .form-heading {
+    display: grid;
   }
 
   .result-tabs {

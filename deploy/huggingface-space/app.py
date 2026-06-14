@@ -41,10 +41,12 @@ from shared_app import (  # noqa: E402
     create_server_app,
     create_ui,
     settings,
+    warmup_model_async,
 )
 
 
 if __name__ == "__main__":
+    warmup_model_async("space-startup")
     if os.getenv("APP_UI_MODE", "").strip().lower() == "blocks":
         ui = create_ui()
         ui.launch(
