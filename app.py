@@ -45,7 +45,7 @@ DEFAULT_OUTPUT = "_Your prep report will appear here._"
 APPLE_CSS_PATH = "assets/apple.css"
 CUSTOM_UI_CSS_PATH = "assets/server.css"
 CUSTOM_UI_JS_PATH = "assets/server.js"
-CUSTOM_UI_ASSET_VERSION = "2026-06-14-user-quote"
+CUSTOM_UI_ASSET_VERSION = "2026-06-14-project-links"
 ROBOT_IMAGE_PATH = "assets/assistant-robot.jpeg"
 APPLE_THEME = gr.themes.Soft()
 DEFAULT_CONTEXT_LENGTH = "8192"
@@ -54,6 +54,8 @@ DOWNLOAD_MODEL_BUTTON_LABEL = "Download Model"
 ROOT_DIR = Path(__file__).resolve().parent
 GITHUB_REPO_URL = "https://github.com/bisonbet/medical-appt-prep"
 FIELD_NOTES_URL = "https://huggingface.co/blog/bisonnetworking/medical-asst-prep-june26"
+VIDEO_DEMO_URL = "https://youtu.be/kRHPwQGC6aU"
+LINKEDIN_POST_URL = "https://www.linkedin.com/posts/timothy-champ_build-small-hackathon-starts-in-6-hours-activity-7471918851132207104-Wh7T?utm_source=share&utm_medium=member_desktop&rcm=ACoAAEBVNSMBksj_L93Oketlrphm5iSG9BGmBqU"
 THEME_MODE_HEAD = """
 <script>
 (() => {
@@ -472,6 +474,9 @@ def _custom_frontend_html() -> str:
               <span>MedGemma 4B</span>
               <span>llama.cpp ready</span>
             </div>
+            <a class="video-link" href="{VIDEO_DEMO_URL}" target="_blank" rel="noopener noreferrer">
+              Watch a short walkthrough
+            </a>
           </div>
         </div>
 
@@ -692,6 +697,14 @@ def _about_frontend_html() -> str:
           <a href="https://www.jetbrains.com/" target="_blank" rel="noopener noreferrer">JetBrains</a>
           <a href="https://blackforestlabs.ai/" target="_blank" rel="noopener noreferrer">Black Forest Labs</a>
         </div>
+        <p class="about-video-note">
+          Video walkthrough:
+          <a href="{VIDEO_DEMO_URL}" target="_blank" rel="noopener noreferrer">watch on YouTube</a>
+        </p>
+        <p class="about-video-note">
+          Project update:
+          <a href="{LINKEDIN_POST_URL}" target="_blank" rel="noopener noreferrer">read the LinkedIn post</a>
+        </p>
       </section>
     </main>
   </body>
@@ -981,6 +994,14 @@ def create_ui() -> gr.Blocks:
                         <a href="https://cohere.com/" target="_blank" rel="noopener noreferrer">Cohere</a>,
                         <a href="https://www.jetbrains.com/" target="_blank" rel="noopener noreferrer">JetBrains</a>,
                         <a href="https://blackforestlabs.ai/" target="_blank" rel="noopener noreferrer">Black Forest Labs</a>.
+                    </p>
+                    <p class="about-meta">
+                        Video walkthrough:
+                        <a href="{VIDEO_DEMO_URL}" target="_blank" rel="noopener noreferrer">watch on YouTube</a>
+                    </p>
+                    <p class="about-meta">
+                        Project update:
+                        <a href="{LINKEDIN_POST_URL}" target="_blank" rel="noopener noreferrer">read the LinkedIn post</a>
                     </p>
                 </section>
                 """

@@ -1,4 +1,4 @@
-import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client/dist/index.min.js";
+import { Client } from "https://cdn.jsdelivr.net/npm/@gradio/client@2.2.2/dist/index.min.js";
 
 const storageKey = "medical-appt-prep-theme";
 const validThemes = new Set(["system", "light", "dark"]);

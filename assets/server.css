@@ -556,6 +556,21 @@ textarea:focus {
   max-width: 760px;
 }
 
+.video-link {
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 750;
+  margin-top: 16px;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.video-link:hover {
+  color: var(--teal-dark);
+}
+
 .article-link {
   align-items: center;
   background: var(--teal-dark);
@@ -696,6 +711,23 @@ textarea:focus {
   border-color: color-mix(in srgb, var(--teal) 52%, var(--line));
   color: var(--teal-dark);
   transform: translateY(-1px);
+}
+
+.about-video-note {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.about-video-note a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.about-video-note a:hover {
+  color: var(--teal-dark);
 }
 
 .results-heading {
