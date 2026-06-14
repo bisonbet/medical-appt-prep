@@ -12,7 +12,12 @@ from pathlib import Path
 
 import gradio as gr
 from fastapi.responses import FileResponse, HTMLResponse
-from src.model import get_model, is_ollama_model_available, pull_ollama_model
+from src.model import (
+    ZERO_GPU_DURATION_SECONDS,
+    get_model,
+    is_ollama_model_available,
+    pull_ollama_model,
+)
 from src.model_catalog import (
     canonical_backend,
     get_default_model_preset_id,
@@ -165,7 +170,7 @@ def _with_zero_gpu(fn):
         import spaces  # type: ignore[import]
     except ImportError:
         return fn
-    return spaces.GPU(duration=120)(fn)
+    return spaces.GPU(duration=ZERO_GPU_DURATION_SECONDS)(fn)
 
 
 def _log_gpu_runtime_once(model_cfg: dict) -> None:
@@ -179,8 +184,7 @@ def _log_gpu_runtime_once(model_cfg: dict) -> None:
 def _model_warmup_enabled() -> bool:
     if os.getenv("SPACE_DISABLE_MODEL_WARMUP", "").strip().lower() in {"1", "true", "yes"}:
         return False
-    deployment = settings.get("app", {}).get("deployment")
-    return deployment == "huggingface" or os.getenv("SPACE_ENABLE_MODEL_WARMUP", "").strip().lower() in {
+    return os.getenv("SPACE_ENABLE_MODEL_WARMUP", "").strip().lower() in {
         "1",
         "true",
         "yes",

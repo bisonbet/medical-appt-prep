@@ -38,6 +38,7 @@ except ImportError:
 _HF_MODEL: Any | None = None
 _HF_PROCESSOR: Any | None = None
 _MODEL_FACTORY_LOCK = threading.Lock()
+ZERO_GPU_DURATION_SECONDS = 60
 
 
 def list_ollama_models(base_url: str = "http://localhost:11434", timeout: int = 5) -> set[str]:
@@ -376,7 +377,7 @@ class HuggingFaceTransformersModel(BaseLLM):
         return self.model is not None and self.processor is not None
 
 
-@spaces.GPU(duration=120)
+@spaces.GPU(duration=ZERO_GPU_DURATION_SECONDS)
 def _hf_generate(
     prompt: str,
     system_prompt: str,

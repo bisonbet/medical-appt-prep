@@ -13,7 +13,7 @@ from src.model_catalog import (
     get_model_preset_choices,
     resolve_model_settings,
 )
-from src.model import _get_model_cached, get_model
+from src.model import ZERO_GPU_DURATION_SECONDS, _get_model_cached, get_model
 from src.processor import (
     REPORT_SECTION_FALLBACK,
     SECTION_OUTPUT_FALLBACK,
@@ -339,11 +339,24 @@ class AppWarmupTests(unittest.TestCase):
         self.assertFalse(started)
         thread_cls.assert_not_called()
 
-    def test_warmup_model_async_starts_once_for_huggingface(self):
+    def test_warmup_model_async_skips_huggingface_by_default(self):
+        app._MODEL_WARMUP_STARTED = False
+        with (
+            mock.patch.object(app, "settings", {"app": {"deployment": "huggingface"}}),
+            mock.patch.dict("os.environ", {}, clear=True),
+            mock.patch("app.threading.Thread") as thread_cls,
+        ):
+            started = app.warmup_model_async("space-startup")
+
+        self.assertFalse(started)
+        thread_cls.assert_not_called()
+
+    def test_warmup_model_async_starts_once_when_explicitly_enabled(self):
         app._MODEL_WARMUP_STARTED = False
         thread = mock.Mock()
         with (
             mock.patch.object(app, "settings", {"app": {"deployment": "huggingface"}}),
+            mock.patch.dict("os.environ", {"SPACE_ENABLE_MODEL_WARMUP": "1"}, clear=True),
             mock.patch("app.threading.Thread", return_value=thread) as thread_cls,
         ):
             first = app.warmup_model_async("space-startup")
@@ -537,6 +550,9 @@ class BackendFactoryTests(unittest.TestCase):
             get_model({"model": {"backend": "hf_transformers", "name": "google/medgemma-1.5-4b-it"}})
 
         self.assertEqual(model_cls.call_args.kwargs["model_name"], "google/medgemma-1.5-4b-it")
+
+    def test_zero_gpu_duration_keeps_anonymous_quota_small(self):
+        self.assertEqual(ZERO_GPU_DURATION_SECONDS, 60)
 
     def test_factory_resolves_selected_preset(self):
         model = get_model(

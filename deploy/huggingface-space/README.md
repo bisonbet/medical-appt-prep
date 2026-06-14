@@ -43,9 +43,9 @@ The Space launches the custom `gradio.Server` interface by default: a warm
 HTML/CSS/JS frontend backed by Gradio's queued API. Set `APP_UI_MODE=blocks`
 only if you need the fallback Gradio Blocks interface.
 
-At startup, the Space begins a background llama.cpp model download/load/warmup
-so the first user request is less likely to pay the full cold-start cost. Set
-`SPACE_DISABLE_MODEL_WARMUP=1` to turn that off temporarily.
+Hosted startup model warmup is disabled by default so anonymous visitors do not
+spend ZeroGPU quota before submitting a report. Set `SPACE_ENABLE_MODEL_WARMUP=1`
+only when intentionally testing cold-start behavior.
 
 Required Space secret:
 

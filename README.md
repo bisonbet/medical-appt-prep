@@ -205,10 +205,10 @@ The Space template lives in `deploy/huggingface-space/` and pins Gradio 6. It
 uses ZeroGPU for report generation and a CUDA-enabled `llama-cpp-python` wheel.
 The template enforces these hosted defaults unless `SPACE_USE_ENV_MODEL_CONFIG=1`
 is set, which prevents stale Space variables from switching the competition
-build back to another backend. On startup, the Space starts a background model
-preload/warmup so the first visitor is less likely to pay the full model
-download/load cost. Set `SPACE_DISABLE_MODEL_WARMUP=1` if you need to disable
-that behavior temporarily.
+build back to another backend. Hosted startup model warmup is disabled by
+default so anonymous visitors do not spend ZeroGPU quota before submitting a
+report. Set `SPACE_ENABLE_MODEL_WARMUP=1` only when intentionally testing cold
+start behavior.
 
 ### OpenAI-Compatible / Nebius
 
@@ -246,7 +246,8 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 | `app.deployment` | `local` | UI copy mode: `local`, `huggingface`, or `hosted` |
 | `server.port` | `7860` | Local web server port |
 | `APP_UI_MODE` | Server UI | Set to `blocks` to use the fallback Gradio Blocks interface |
-| `SPACE_DISABLE_MODEL_WARMUP` | unset | Set to `1` to disable hosted startup model warmup |
+| `SPACE_ENABLE_MODEL_WARMUP` | unset | Set to `1` to opt into hosted startup model warmup |
+| `SPACE_DISABLE_MODEL_WARMUP` | unset | Set to `1` to force hosted startup model warmup off |
 
 To add another selectable medical model later, add a new entry under
 `model.presets` with backend-specific names for the backends you want to support.
