@@ -1,12 +1,12 @@
 # Medical Appointment Prep Assistant
 
 A dual-mode AI assistant that helps you prepare for doctor's appointments.
-Enter your symptoms, notes, and medications — get back a symptom timeline, questions
-to ask your doctor, and relevant background information.
+Enter your symptoms, notes, and medications, then get back a symptom timeline,
+questions to ask your doctor, and relevant background information.
 
 Local mode runs on your machine with Ollama or llama.cpp. Hosted mode is designed
-for Hugging Face Spaces now and OpenAI-compatible serverless endpoints such as
-Nebius later.
+for Hugging Face Spaces and OpenAI-compatible serverless endpoints such as
+Nebius.
 
 ---
 
@@ -15,7 +15,7 @@ Nebius later.
 - Gradio 6 web UI (runs in your browser)
 - Custom `gradio.Server` frontend for a warmer, non-technical appointment-prep experience
 - One-click fictional demo cases so reviewers can try the flow without inventing inputs
-- Separate focused generation calls fill each report tab: Timeline, Questions, Relevant Info
+- One report generation call parsed into three tabs: Timeline, Questions, Relevant Info
 - Full-report export actions for email drafts, PDF/print, clipboard, portal copy, and text download
 - Print/PDF export opens a printable full-report view and triggers the browser print dialog
 - Four LLM backend options: **Ollama**, **llama-cpp-python**, **Hugging Face Transformers**, or **OpenAI-compatible**
@@ -37,6 +37,16 @@ The competition build is intentionally small-model first:
 - **Off-Brand / Custom UI fit:** custom `gradio.Server` frontend instead of default Blocks
 - **Local-first fit:** local desktop path uses Ollama or llama.cpp without cloud APIs
 - **Field Notes fit:** the app is designed to be explained as an appointment-prep workflow, not a medical-advice product
+
+---
+
+## Field Note
+
+> I always find it hard to remember what to ask or mention in the middle of an
+> appointment. Having this sheet to read from or share with my doctor really
+> helped me in my last appointment.
+>
+> - My Spouse
 
 ---
 
@@ -67,7 +77,7 @@ cached automatically by their backends when used.
 ### 2. Clone and set up the project
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/medical-appt-prep.git
+git clone https://github.com/bisonbet/medical-appt-prep.git
 cd medical-appt-prep
 ```
 
@@ -133,8 +143,9 @@ model:
   n_gpu_layers: 0  # increase to offload layers to GPU
 ```
 
-Download a compatible `.gguf` from [Hugging Face](https://huggingface.co) (search for
-`medgemma gguf` or `MediPhi gguf`).
+Download a compatible `.gguf` from [Hugging Face](https://huggingface.co) or
+configure `model_repo_id` and `model_filename` so the llama.cpp backend can
+download it from the Hub.
 
 ---
 
@@ -175,9 +186,12 @@ APP_DEPLOYMENT=huggingface
 
 The Space template lives in `deploy/huggingface-space/` and pins Gradio 6. It
 uses ZeroGPU for report generation and a CUDA-enabled `llama-cpp-python` wheel.
-On startup, the Space starts a background model preload/warmup so the first
-visitor is less likely to pay the full model download/load cost. Set
-`SPACE_DISABLE_MODEL_WARMUP=1` if you need to disable that behavior temporarily.
+The template enforces these hosted defaults unless `SPACE_USE_ENV_MODEL_CONFIG=1`
+is set, which prevents stale Space variables from switching the competition
+build back to another backend. On startup, the Space starts a background model
+preload/warmup so the first visitor is less likely to pay the full model
+download/load cost. Set `SPACE_DISABLE_MODEL_WARMUP=1` if you need to disable
+that behavior temporarily.
 
 ### OpenAI-Compatible / Nebius
 
@@ -207,12 +221,15 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 | `model.name` | `medgemma1.5:4b` | Fallback backend model name |
 | `model.ollama_base_url` | `http://localhost:11434` | Ollama API URL |
 | `model.model_path` | — | Path to `.gguf` file (llama_cpp only) |
-| `model.max_new_tokens` | `256` | Generation budget for each generated section |
-| `app.deployment` | `local` | UI copy mode: `local`, `huggingface`, or `hosted` |
+| `model.model_repo_id` | — | Hugging Face repo for a GGUF model download (llama_cpp only) |
+| `model.model_filename` | — | GGUF filename inside `model.model_repo_id` (llama_cpp only) |
+| `model.max_new_tokens` | `256` | Generation budget for the full prep report |
 | `model.temperature` | `0.3` | Generation temperature |
 | `model.context_length` | `8192` | Context window size |
+| `app.deployment` | `local` | UI copy mode: `local`, `huggingface`, or `hosted` |
 | `server.port` | `7860` | Local web server port |
 | `APP_UI_MODE` | Server UI | Set to `blocks` to use the fallback Gradio Blocks interface |
+| `SPACE_DISABLE_MODEL_WARMUP` | unset | Set to `1` to disable hosted startup model warmup |
 
 To add another selectable medical model later, add a new entry under
 `model.presets` with backend-specific names for the backends you want to support.
@@ -260,7 +277,7 @@ medical-appt-prep/
 │   ├── __init__.py
 │   ├── medications.py   # Medication autocomplete data helpers
 │   ├── model.py         # LLM backends
-│   ├── prompts.py       # Prompt templates for each output type
+│   ├── prompts.py       # Prompt template and required report markers
 │   └── processor.py     # Input validation and output post-processing
 ├── requirements.txt
 ├── .env.example

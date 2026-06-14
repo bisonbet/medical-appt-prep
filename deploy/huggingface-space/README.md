@@ -18,6 +18,12 @@ Hackathon focus: Backyard AI appointment preparation with a custom Gradio Server
 UI, one-click fictional demo cases, full-report export actions, and a small
 MedGemma 1.5 4B GGUF model running through llama.cpp.
 
+> I always find it hard to remember what to ask or mention in the middle of an
+> appointment. Having this sheet to read from or share with my doctor really
+> helped me in my last appointment.
+>
+> - My Spouse
+
 The Space launches the custom `gradio.Server` interface by default: a warm
 HTML/CSS/JS frontend backed by Gradio's queued API. Set `APP_UI_MODE=blocks`
 only if you need the fallback Gradio Blocks interface.
