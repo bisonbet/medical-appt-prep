@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import mock
 
 import app
 import config_loader
+from scripts.export_hf_space import DEFAULT_SPACE_ID, export_space
 from src.model_catalog import (
     get_default_model_preset_id,
     get_model_preset_choices,
@@ -489,6 +492,35 @@ class ModelCatalogTests(unittest.TestCase):
         self.assertEqual(resolved["model"]["n_batch"], 2048)
         self.assertTrue(resolved["model"]["flash_attn"])
         self.assertFalse(resolved["model"]["swa_full"])
+
+
+class HuggingFaceExportTests(unittest.TestCase):
+    def test_default_space_target_is_build_small_org(self):
+        self.assertEqual(DEFAULT_SPACE_ID, "build-small-hackathon/medical-appt-prep")
+
+    def test_export_preserves_existing_space_readme_tags(self):
+        with TemporaryDirectory() as tmpdir:
+            export_dir = Path(tmpdir)
+            (export_dir / "README.md").write_text(
+                """---
+title: Existing
+tags:
+  - track:backyard
+  - sponsor:openai
+  - achievement:offbrand
+---
+
+# Existing README
+"""
+            )
+
+            export_space(export_dir)
+
+            readme = (export_dir / "README.md").read_text()
+            self.assertIn("title: Medical Appointment Prep", readme)
+            self.assertIn("  - track:backyard", readme)
+            self.assertIn("  - sponsor:openai", readme)
+            self.assertIn("  - achievement:offbrand", readme)
 
 
 class BackendFactoryTests(unittest.TestCase):

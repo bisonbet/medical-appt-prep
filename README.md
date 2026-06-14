@@ -171,6 +171,16 @@ lightweight local install path.
 python scripts/export_hf_space.py /path/to/hf-space-repo
 ```
 
+The hosted competition Space is `build-small-hackathon/medical-appt-prep`.
+For a full export, upload, and runtime verification pass, use:
+
+```bash
+python scripts/deploy_hf_space.py
+```
+
+The deploy helper downloads the live Space README before export so hackathon
+track, prize, and badge tags committed on Hugging Face are preserved.
+
 Configure the Space with:
 
 ```text

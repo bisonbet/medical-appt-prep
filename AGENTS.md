@@ -127,6 +127,8 @@ Hosted deployment is intentionally separated from the local dependency path.
 - Root `requirements.txt` stays lightweight and should not include Torch/Transformers by default.
 - Hosted-only dependencies belong in `deploy/huggingface-space/requirements.txt`.
 - The Space wrapper imports `shared_app.py`, which is copied from root `app.py` by `scripts/export_hf_space.py`.
+- The active hosted competition target is `build-small-hackathon/medical-appt-prep`; use `scripts/deploy_hf_space.py` for export, upload, and runtime verification.
+- Preserve the Space README `tags:` block when exporting so hackathon tags added on Hugging Face are not overwritten.
 - If core files, config, assets, data, or package layout change, verify the export script still copies everything needed.
 - For hosted defaults, update `deploy/huggingface-space/app.py` and `deploy/huggingface-space/README.md` together.
 

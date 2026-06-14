@@ -8,6 +8,13 @@ sdk_version: 6.16.0
 app_file: app.py
 suggested_hardware: zero-a10g
 pinned: false
+tags:
+  - track:backyard
+  - sponsor:openai
+  - achievement:offgrid
+  - achievement:offbrand
+  - achievement:llama
+  - achievement:fieldnotes
 ---
 
 # Medical Appointment Prep
@@ -23,6 +30,7 @@ Project links:
 - Field Notes article: https://huggingface.co/blog/bisonnetworking/medical-asst-prep-june26
 - Video walkthrough: https://youtu.be/kRHPwQGC6aU
 - LinkedIn project update: https://www.linkedin.com/posts/timothy-champ_build-small-hackathon-starts-in-6-hours-activity-7471918851132207104-Wh7T?utm_source=share&utm_medium=member_desktop&rcm=ACoAAEBVNSMBksj_L93Oketlrphm5iSG9BGmBqU
+- GitHub repository: https://github.com/bisonbet/medical-appt-prep
 
 > I always find it hard to remember what to ask or mention in the middle of an
 > appointment. Helping a parent with appointments can be even more confusing,
