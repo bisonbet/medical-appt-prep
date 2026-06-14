@@ -7,8 +7,10 @@ import os
 import re
 import subprocess
 import time
+from pathlib import Path
 
 import gradio as gr
+from fastapi.responses import FileResponse, HTMLResponse
 from src.model import get_model, is_ollama_model_available, pull_ollama_model
 from src.model_catalog import (
     canonical_backend,
@@ -38,10 +40,15 @@ _RECENT_TIMING_RE = re.compile(
 
 DEFAULT_OUTPUT = "_Your prep report will appear here._"
 APPLE_CSS_PATH = "assets/apple.css"
+CUSTOM_UI_CSS_PATH = "assets/server.css"
+CUSTOM_UI_JS_PATH = "assets/server.js"
+ROBOT_IMAGE_PATH = "assets/assistant-robot.jpeg"
 APPLE_THEME = gr.themes.Soft()
 DEFAULT_CONTEXT_LENGTH = "8192"
 DEFAULT_TEMPERATURE = "0.3"
 DOWNLOAD_MODEL_BUTTON_LABEL = "Download Model"
+ROOT_DIR = Path(__file__).resolve().parent
+GITHUB_REPO_URL = "https://github.com/bisonbet/medical-appt-prep"
 THEME_MODE_HEAD = """
 <script>
 (() => {
@@ -348,6 +355,314 @@ def filter_medication_picker_choices(all_choices: list[str], evt: gr.KeyUpData):
     return gr.update(choices=filter_medication_choices(evt.input_value, all_choices))
 
 
+def _page_head(title: str = "Medical Appointment Prep") -> str:
+    return f"""<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <link rel="stylesheet" href="/assets/server.css" />
+    <script type="module" src="/assets/server.js"></script>
+  </head>"""
+
+
+def _topbar_html(active_page: str = "prep") -> str:
+    prep_active = " selected" if active_page == "prep" else ""
+    about_active = " selected" if active_page == "about" else ""
+    return f"""<header class="topbar" aria-label="Application">
+      <a class="brand" href="/" aria-label="Medical Appointment Prep home">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span>
+        </span>
+        <span>Medical Appointment Prep</span>
+      </a>
+      <nav class="top-nav" aria-label="Primary">
+        <a class="nav-link{prep_active}" href="/">Prep</a>
+        <a class="nav-link{about_active}" href="/about">About</a>
+      </nav>
+      <div class="theme-switcher" aria-label="Appearance">
+        <button type="button" data-theme-option="system" aria-pressed="true">System</button>
+        <button type="button" data-theme-option="light" aria-pressed="false">Light</button>
+        <button type="button" data-theme-option="dark" aria-pressed="false">Dark</button>
+      </div>
+    </header>"""
+
+
+def _custom_frontend_html() -> str:
+    return f"""<!doctype html>
+<html lang="en" data-theme="system">
+  {_page_head()}
+  <body>
+    {_topbar_html("prep")}
+
+    <main class="page-shell">
+      <section class="hero-workspace" aria-labelledby="page-title">
+        <div class="guide-panel">
+          <div class="guide-visual">
+            <img src="/assets/assistant-robot.jpeg" alt="Friendly robot assistant in a medical room" />
+            <div class="guide-bubble">
+              <span class="pulse-dot" aria-hidden="true"></span>
+              <span>Ready when you are</span>
+            </div>
+          </div>
+          <div class="guide-copy">
+            <p class="eyebrow">A calm visit-planning helper</p>
+            <h1 id="page-title">Bring the important details into the room.</h1>
+            <p>
+              Share what has been happening, what you have noticed, and what you take.
+              The assistant turns it into a clear timeline, useful questions, and background notes.
+            </p>
+            <div class="trust-strip" aria-label="Privacy and safety notes">
+              <span>Informational only</span>
+              <span>No diagnosis</span>
+            </div>
+          </div>
+        </div>
+
+        <form class="prep-form" id="prep-form">
+          <div class="form-heading">
+            <p class="eyebrow">Step 1</p>
+            <h2>Tell me what you want your clinician to know.</h2>
+          </div>
+
+          <label class="field-label" for="symptoms">What symptoms or concerns are you having?</label>
+          <textarea id="symptoms" name="symptoms" rows="6" required
+            placeholder="Example: Headache behind my eyes for 3 days. Worse in the morning. Mild nausea."></textarea>
+
+          <label class="field-label" for="notes">Anything else that might matter?</label>
+          <textarea id="notes" name="notes" rows="4"
+            placeholder="Example: New stress, sleep changes, recent travel, diet changes, or what makes it better or worse."></textarea>
+
+          <div class="medication-card">
+            <div>
+              <p class="eyebrow">Step 2</p>
+              <h3>Add medications, vitamins, or supplements.</h3>
+            </div>
+            <div class="medication-row">
+              <div class="combo-field">
+                <label class="field-label" for="medication-name">Medication name</label>
+                <input id="medication-name" autocomplete="off"
+                  placeholder="Search or type anything" />
+                <div id="medication-suggestions" class="suggestions" role="listbox" hidden></div>
+              </div>
+              <div>
+                <label class="field-label" for="medication-instructions">How you take it</label>
+                <input id="medication-instructions"
+                  placeholder="Example: 10 mg once daily" />
+              </div>
+              <button class="secondary-action" type="button" id="add-medication">Add</button>
+            </div>
+            <textarea id="medications" name="medications" rows="3"
+              placeholder="Your medication list will appear here. You can edit it directly."></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button class="primary-action" type="submit" id="generate-button">
+              <span class="button-label">Generate Prep Report</span>
+              <span class="button-spinner" aria-hidden="true"></span>
+            </button>
+            <button class="ghost-action" type="button" id="clear-button">Clear</button>
+          </div>
+          <p class="form-note">
+            This tool helps organize appointment notes. It is not a medical diagnosis,
+            treatment recommendation, or substitute for a qualified clinician.
+          </p>
+        </form>
+      </section>
+
+      <section class="results-shell" aria-labelledby="results-title">
+        <div class="results-heading">
+          <p class="eyebrow">Step 3</p>
+          <h2 id="results-title">Your appointment prep</h2>
+          <p id="status-message" role="status">Your report will appear after you generate it.</p>
+        </div>
+
+        <div class="result-tabs" role="tablist" aria-label="Report sections">
+          <button type="button" class="selected" role="tab" aria-selected="true" data-tab="timeline">Timeline</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="questions">Questions</button>
+          <button type="button" role="tab" aria-selected="false" data-tab="relevant">Relevant Info</button>
+        </div>
+
+        <article class="report-panel selected" id="timeline-panel" data-panel="timeline">
+          <div class="panel-icon" aria-hidden="true">1</div>
+          <div class="markdown-body" id="timeline-output">Your timeline will appear here.</div>
+        </article>
+        <article class="report-panel" id="questions-panel" data-panel="questions">
+          <div class="panel-icon" aria-hidden="true">2</div>
+          <div class="markdown-body" id="questions-output">Questions for your visit will appear here.</div>
+        </article>
+        <article class="report-panel" id="relevant-panel" data-panel="relevant">
+          <div class="panel-icon" aria-hidden="true">3</div>
+          <div class="markdown-body" id="relevant-output">Relevant background information will appear here.</div>
+        </article>
+
+        <div class="export-card" aria-labelledby="export-title">
+          <div class="export-heading">
+            <div>
+              <p class="eyebrow">Take it with you</p>
+              <h3 id="export-title">Share or save your prep</h3>
+            </div>
+            <p id="export-status" role="status">Generate a report to enable exports.</p>
+          </div>
+          <div class="export-actions" aria-label="Export options">
+            <button type="button" class="export-action primary-export" id="email-report" disabled>
+              <span class="export-icon" aria-hidden="true">@</span>
+              <span>Email</span>
+            </button>
+            <button type="button" class="export-action" id="pdf-report" disabled>
+              <span class="export-icon" aria-hidden="true">PDF</span>
+              <span>Export PDF</span>
+            </button>
+            <button type="button" class="export-action" id="print-report" disabled>
+              <span class="export-icon" aria-hidden="true">PRN</span>
+              <span>Print</span>
+            </button>
+            <button type="button" class="export-action" id="copy-report" disabled>
+              <span class="export-icon" aria-hidden="true">TXT</span>
+              <span>Copy All</span>
+            </button>
+            <button type="button" class="export-action" id="portal-copy" disabled>
+              <span class="export-icon" aria-hidden="true">PT</span>
+              <span>Portal Copy</span>
+            </button>
+            <button type="button" class="export-action" id="download-report" disabled>
+              <span class="export-icon" aria-hidden="true">DL</span>
+              <span>Download Text</span>
+            </button>
+          </div>
+          <p class="export-note">
+            Email, downloads, and copied text may include health details. Review before sending,
+            saving, or pasting into another service.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>"""
+
+
+def _about_frontend_html() -> str:
+    return f"""<!doctype html>
+<html lang="en" data-theme="system">
+  {_page_head("About Medical Appointment Prep")}
+  <body>
+    {_topbar_html("about")}
+
+    <main class="page-shell about-page">
+      <section class="about-hero" aria-labelledby="about-title">
+        <p class="eyebrow">About</p>
+        <h1 id="about-title">A calmer way to prepare for a medical visit.</h1>
+        <p>
+          Medical Appointment Prep helps people turn symptoms, notes, and
+          medications into a visit-ready timeline, questions, and background
+          information they can review with a clinician.
+        </p>
+        <div class="trust-strip" aria-label="Safety notes">
+          <span>Informational only</span>
+          <span>No diagnosis</span>
+          <span>Patient-controlled export</span>
+        </div>
+      </section>
+
+      <section class="about-grid" aria-label="Project details">
+        <article class="about-card">
+          <p class="eyebrow">Purpose</p>
+          <h2>Built for regular people</h2>
+          <p>
+            The interface is designed to feel familiar and approachable, with
+            plain-language prompts and report sections that match how people
+            prepare for appointments.
+          </p>
+        </article>
+        <article class="about-card">
+          <p class="eyebrow">Safety</p>
+          <h2>Organization, not advice</h2>
+          <p>
+            The app helps organize what the user provides. It does not diagnose,
+            choose treatment, or replace a qualified healthcare professional.
+          </p>
+        </article>
+        <article class="about-card source-card">
+          <p class="eyebrow">Source</p>
+          <h2>Project repository</h2>
+          <p>
+            The source code is maintained on GitHub and will be public soon.
+          </p>
+          <a class="github-link" href="{GITHUB_REPO_URL}" target="_blank" rel="noopener noreferrer">
+            Open GitHub repository
+          </a>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>"""
+
+
+def create_server_app() -> gr.Server:
+    """Create a custom Server-mode app with Gradio's queued API backend."""
+    server = gr.Server(title="Medical Appointment Prep Assistant")
+
+    @server.api(
+        name="generate",
+        concurrency_limit=1,
+        concurrency_id="llama-cpp-gpu",
+        api_visibility="public",
+    )
+    def generate(symptoms: str, notes: str, medications: str) -> tuple[str, str, str]:
+        return run_inference(symptoms, notes, medications)
+
+    @server.get("/", response_class=HTMLResponse)
+    async def homepage():
+        return _custom_frontend_html()
+
+    @server.get("/about", response_class=HTMLResponse)
+    async def about_page():
+        return _about_frontend_html()
+
+    @server.get("/assets/{asset_name}")
+    async def asset(asset_name: str):
+        allowed_assets = {
+            "server.css": CUSTOM_UI_CSS_PATH,
+            "server.js": CUSTOM_UI_JS_PATH,
+            "assistant-robot.jpeg": ROBOT_IMAGE_PATH,
+        }
+        asset_path = allowed_assets.get(asset_name)
+        if asset_path is None:
+            return HTMLResponse("Not found", status_code=404)
+        return FileResponse(ROOT_DIR / asset_path)
+
+    @server.get("/api/medications")
+    async def medication_suggestions(q: str = ""):
+        return {"choices": filter_medication_choices(q, load_medication_choices(), limit=20)}
+
+    return server
+
+
+def launch_app() -> None:
+    server_host = settings.get("server", {}).get("host", "127.0.0.1")
+    server_port = settings.get("server", {}).get("port", 7860)
+    if os.getenv("APP_UI_MODE", "").strip().lower() == "blocks":
+        ui = create_ui()
+        ui.launch(
+            server_name=server_host,
+            server_port=server_port,
+            theme=APPLE_THEME,
+            css_paths=[APPLE_CSS_PATH],
+            head=THEME_MODE_HEAD,
+            footer_links=["api"],
+            share=False,
+            inbrowser=True,
+        )
+        return
+
+    server = create_server_app()
+    server.launch(
+        server_name=server_host,
+        server_port=server_port,
+        show_error=True,
+        inbrowser=True,
+    )
+
+
 def create_ui() -> gr.Blocks:
     app_cfg = settings.get("app", {})
     model_cfg = settings.get("model", {})
@@ -358,17 +673,18 @@ def create_ui() -> gr.Blocks:
     medication_summary = medication_index_summary()
     deployment = app_cfg.get("deployment", "local")
     is_local_deployment = deployment == "local"
-    nav_status = "Local" if is_local_deployment else "Hosted"
-    about_heading = (
-        "Local medical appointment preparation."
-        if is_local_deployment
-        else "Hosted medical appointment preparation."
-    )
-    about_copy = (
-        "This tool organizes appointment notes with a local language model."
-        if is_local_deployment
-        else "This tool organizes appointment notes with a hosted language model backend."
-    )
+    if is_local_deployment:
+        about_heading = "Local medical appointment preparation."
+        about_copy = "This tool organizes appointment notes with a local language model."
+    elif deployment == "huggingface":
+        about_heading = "Space-local medical appointment preparation."
+        about_copy = (
+            "This tool organizes appointment notes with a language model running "
+            "inside this Hugging Face Space."
+        )
+    else:
+        about_heading = "Hosted medical appointment preparation."
+        about_copy = "This tool organizes appointment notes with a hosted language model backend."
 
     if backend.lower() in ("hf_transformers", "huggingface", "transformers"):
         get_model(selected_model_settings)
@@ -384,7 +700,6 @@ def create_ui() -> gr.Blocks:
                 <div class="nav-inner">
                     <span class="nav-mark" aria-hidden="true"></span>
                     <span class="nav-title">Medical Appointment Prep</span>
-                    <span class="nav-status">{nav_status}</span>
                     <div class="theme-switcher" aria-label="Appearance">
                         <button type="button" data-theme-option="system">System</button>
                         <button type="button" data-theme-option="light">Light</button>
@@ -589,14 +904,4 @@ def create_ui() -> gr.Blocks:
 
 
 if __name__ == "__main__":
-    ui = create_ui()
-    ui.launch(
-        server_name=settings.get("server", {}).get("host", "127.0.0.1"),
-        server_port=settings.get("server", {}).get("port", 7860),
-        theme=APPLE_THEME,
-        css_paths=[APPLE_CSS_PATH],
-        head=THEME_MODE_HEAD,
-        footer_links=["api"],
-        share=False,
-        inbrowser=True,
-    )
+    launch_app()

@@ -13,7 +13,9 @@ Nebius later.
 ## Features
 
 - Gradio 6 web UI (runs in your browser)
+- Custom `gradio.Server` frontend for a warmer, non-technical appointment-prep experience
 - Separate focused generation calls fill each report tab: Timeline, Questions, Relevant Info
+- Export actions for email drafts, PDF/print, clipboard, portal copy, and text download
 - Four LLM backend options: **Ollama**, **llama-cpp-python**, **Hugging Face Transformers**, or **OpenAI-compatible**
 - Uses MedGemma 1.5 4B by default, with model settings hidden from non-technical users
 - Local RxTerms medication autocomplete with custom entry fallback
@@ -73,6 +75,13 @@ python app.py
 ```
 
 Open your browser to **http://127.0.0.1:7860**
+
+The default UI uses `gradio.Server`: a custom HTML/CSS/JS frontend backed by
+Gradio's queued API. To launch the older Blocks UI for comparison or fallback:
+
+```bash
+APP_UI_MODE=blocks python app.py
+```
 
 ---
 
@@ -183,6 +192,7 @@ All settings live in `config/settings.yaml`. You can also override them with a `
 | `model.temperature` | `0.3` | Generation temperature |
 | `model.context_length` | `8192` | Context window size |
 | `server.port` | `7860` | Local web server port |
+| `APP_UI_MODE` | Server UI | Set to `blocks` to use the fallback Gradio Blocks interface |
 
 To add another selectable medical model later, add a new entry under
 `model.presets` with backend-specific names for the backends you want to support.
@@ -211,6 +221,11 @@ The source ZIP download is ignored by git; the compact JSON index is committed.
 ```
 medical-appt-prep/
 ├── app.py               # Gradio UI and inference orchestration
+├── assets/
+│   ├── assistant-robot.jpeg # Friendly guide image used by the Server UI
+│   ├── server.css       # Custom Server UI styling
+│   ├── server.js        # Custom Server UI behavior
+│   └── apple.css        # Fallback Blocks UI styling
 ├── config_loader.py     # Loads settings.yaml + .env overrides
 ├── config/
 │   └── settings.yaml    # Model and server configuration

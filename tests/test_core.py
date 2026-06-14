@@ -159,6 +159,12 @@ RELEVANT_INFO:
             SECTION_OUTPUT_FALLBACK,
         )
 
+    def test_clean_section_output_does_not_surface_unused_token_reasoning(self):
+        self.assertEqual(
+            clean_section_output("<unused94> thought\nI should plan first.\n- Draft"),
+            SECTION_OUTPUT_FALLBACK,
+        )
+
     def test_clean_section_output_uses_final_answer_after_reasoning(self):
         self.assertEqual(
             clean_section_output("thought I should plan first.\n\nFinal:\n- Day 1 headache"),

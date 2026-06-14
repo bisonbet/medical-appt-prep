@@ -74,7 +74,7 @@ SECTION_OUTPUT_FALLBACK = (
 )
 
 _REASONING_PREFIX_RE = re.compile(
-    r"^\s*(?:<think>|thought\b|thinking\b|analysis\b|reasoning\b)",
+    r"^\s*(?:<think>|<unused\d+>\s*)?(?:thought\b|thinking\b|analysis\b|reasoning\b)",
     flags=re.IGNORECASE,
 )
 _FINAL_REPORT_RE = re.compile(

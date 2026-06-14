@@ -14,6 +14,10 @@ pinned: false
 
 Hosted Gradio Space for the Medical Appointment Prep Assistant.
 
+The Space launches the custom `gradio.Server` interface by default: a warm
+HTML/CSS/JS frontend backed by Gradio's queued API. Set `APP_UI_MODE=blocks`
+only if you need the fallback Gradio Blocks interface.
+
 Required Space secret:
 
 - `HF_TOKEN`: Hugging Face token, used for Hub model downloads when needed
