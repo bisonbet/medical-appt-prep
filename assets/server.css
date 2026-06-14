@@ -604,6 +604,32 @@ textarea:focus {
   border-color: var(--teal-dark);
 }
 
+.field-note-quote {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--teal) 12%, transparent), transparent 46%),
+    var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px;
+}
+
+.field-note-quote blockquote {
+  color: var(--ink);
+  font-size: clamp(24px, 3vw, 36px);
+  font-weight: 800;
+  line-height: 1.16;
+  margin: 0;
+  max-width: 940px;
+}
+
+.quote-attribution {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 850;
+  margin: 18px 0 0;
+}
+
 .acknowledgements {
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--blue) 10%, transparent), transparent 48%),
@@ -898,6 +924,7 @@ a:focus-visible {
   .guide-copy,
   .about-hero,
   .about-card,
+  .field-note-quote,
   .acknowledgements,
   .prep-form,
   .results-shell {

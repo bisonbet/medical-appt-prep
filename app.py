@@ -45,7 +45,7 @@ DEFAULT_OUTPUT = "_Your prep report will appear here._"
 APPLE_CSS_PATH = "assets/apple.css"
 CUSTOM_UI_CSS_PATH = "assets/server.css"
 CUSTOM_UI_JS_PATH = "assets/server.js"
-CUSTOM_UI_ASSET_VERSION = "2026-06-14-acknowledgements"
+CUSTOM_UI_ASSET_VERSION = "2026-06-14-user-quote"
 ROBOT_IMAGE_PATH = "assets/assistant-robot.jpeg"
 APPLE_THEME = gr.themes.Soft()
 DEFAULT_CONTEXT_LENGTH = "8192"
@@ -656,6 +656,16 @@ def _about_frontend_html() -> str:
         </article>
       </section>
 
+      <section class="field-note-quote" aria-labelledby="field-note-title">
+        <p class="eyebrow" id="field-note-title">Field note</p>
+        <blockquote>
+          I always find it hard to remember what to ask or mention in the middle
+          of an appointment. Having this sheet to read from or share with my doctor
+          really helped me in my last appointment.
+        </blockquote>
+        <p class="quote-attribution">- My Spouse</p>
+      </section>
+
       <section class="acknowledgements" aria-labelledby="acknowledgements-title">
         <div>
           <p class="eyebrow">Acknowledgements</p>
@@ -932,6 +942,14 @@ def create_ui() -> gr.Blocks:
                         </a>
                     </p>
                     <p class="about-meta">AI assisted by Codex.</p>
+                    <hr />
+                    <h3>Field note</h3>
+                    <blockquote>
+                        I always find it hard to remember what to ask or mention in the middle
+                        of an appointment. Having this sheet to read from or share with my doctor
+                        really helped me in my last appointment.
+                    </blockquote>
+                    <p class="about-meta">- My Spouse</p>
                     <hr />
                     <h3>Acknowledgements</h3>
                     <p>
