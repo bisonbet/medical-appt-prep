@@ -247,7 +247,7 @@ function fillDemoCase() {
   fields.medicationName.value = "";
   fields.medicationInstructions.value = "";
   hideSuggestions();
-  resetReportState(`Demo loaded: ${demo.label}. Review or edit it, then generate the prep report.`);
+  resetReportState(`Sample test data loaded: ${demo.label}. Review or edit it, then generate the prep report.`);
   fields.symptoms.focus();
 }
 

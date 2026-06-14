@@ -556,6 +556,25 @@ textarea:focus {
   max-width: 760px;
 }
 
+.article-link {
+  align-items: center;
+  background: var(--teal-dark);
+  border: 1px solid var(--teal-dark);
+  border-radius: var(--radius);
+  color: #ffffff;
+  display: inline-flex;
+  font-weight: 850;
+  margin-top: 22px;
+  min-height: 48px;
+  padding: 0 18px;
+  text-decoration: none;
+}
+
+.article-link:hover {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
 .about-grid {
   display: grid;
   gap: 18px;

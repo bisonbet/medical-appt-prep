@@ -14,7 +14,7 @@ Nebius.
 
 - Gradio 6 web UI (runs in your browser)
 - Custom `gradio.Server` frontend for a warmer, non-technical appointment-prep experience
-- One-click fictional demo cases so reviewers can try the flow without inventing inputs
+- One-click fictional sample test data so reviewers can try the flow without inventing inputs
 - One report generation call parsed into three tabs: Timeline, Questions, Relevant Info
 - Full-report export actions for email drafts, PDF/print, clipboard, portal copy, and text download
 - Print/PDF export opens a printable full-report view and triggers the browser print dialog
@@ -41,6 +41,9 @@ The competition build is intentionally small-model first:
 ---
 
 ## Field Note
+
+Read the full Hugging Face Field Notes article:
+[Medical Appointment Prep: small, local-first health visit prep](https://huggingface.co/blog/bisonnetworking/medical-asst-prep-june26)
 
 > I always find it hard to remember what to ask or mention in the middle of an
 > appointment. Helping a parent with appointments can be even more confusing,

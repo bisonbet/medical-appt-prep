@@ -53,6 +53,7 @@ DEFAULT_TEMPERATURE = "0.3"
 DOWNLOAD_MODEL_BUTTON_LABEL = "Download Model"
 ROOT_DIR = Path(__file__).resolve().parent
 GITHUB_REPO_URL = "https://github.com/bisonbet/medical-appt-prep"
+FIELD_NOTES_URL = "https://huggingface.co/blog/bisonnetworking/medical-asst-prep-june26"
 THEME_MODE_HEAD = """
 <script>
 (() => {
@@ -480,7 +481,7 @@ def _custom_frontend_html() -> str:
               <p class="eyebrow">Step 1</p>
               <h2>Tell me what you want your clinician to know.</h2>
             </div>
-            <button class="demo-action" type="button" id="demo-button">Click here for a demo</button>
+            <button class="demo-action" type="button" id="demo-button">Fill sample data to test</button>
           </div>
 
           <label class="field-label" for="symptoms">What symptoms or concerns are you having?</label>
@@ -622,6 +623,9 @@ def _about_frontend_html() -> str:
           <span>4B small-model build</span>
           <span>llama.cpp Space runtime</span>
         </div>
+        <a class="article-link" href="{FIELD_NOTES_URL}" target="_blank" rel="noopener noreferrer">
+          Read the Field Notes article
+        </a>
       </section>
 
       <section class="about-grid" aria-label="Project details">
@@ -936,6 +940,12 @@ def create_ui() -> gr.Blocks:
                         {about_copy}
                         It is for informational and organizational purposes only, not diagnosis,
                         treatment, or a substitute for professional medical advice.
+                    </p>
+                    <p class="about-meta">
+                        Field Notes:
+                        <a class="about-article-link" href="{FIELD_NOTES_URL}" target="_blank" rel="noopener noreferrer">
+                            Read the Hugging Face article
+                        </a>
                     </p>
                     <p class="about-meta">
                         Source code:

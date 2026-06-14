@@ -15,8 +15,11 @@ pinned: false
 Hosted Gradio Space for the Medical Appointment Prep Assistant.
 
 Hackathon focus: Backyard AI appointment preparation with a custom Gradio Server
-UI, one-click fictional demo cases, full-report export actions, and a small
+UI, one-click fictional sample test data, full-report export actions, and a small
 MedGemma 1.5 4B GGUF model running through llama.cpp.
+
+Field Notes article:
+https://huggingface.co/blog/bisonnetworking/medical-asst-prep-june26
 
 > I always find it hard to remember what to ask or mention in the middle of an
 > appointment. Helping a parent with appointments can be even more confusing,

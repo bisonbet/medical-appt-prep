@@ -490,6 +490,23 @@ body,
   text-decoration: underline;
 }
 
+.about-tile .about-meta a.about-article-link {
+  background: var(--apple-blue);
+  border-radius: 9999px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 17px;
+  font-weight: 500;
+  min-height: 44px;
+  padding: 10px 18px;
+  text-decoration: none;
+}
+
+.about-tile .about-meta a.about-article-link:hover {
+  background: var(--apple-blue-focus);
+  text-decoration: none;
+}
+
 @media (max-width: 900px) {
   .prep-grid {
     display: flex;
