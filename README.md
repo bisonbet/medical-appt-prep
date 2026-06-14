@@ -43,8 +43,9 @@ The competition build is intentionally small-model first:
 ## Field Note
 
 > I always find it hard to remember what to ask or mention in the middle of an
-> appointment. Having this sheet to read from or share with my doctor really
-> helped me in my last appointment.
+> appointment. Helping a parent with appointments can be even more confusing,
+> and this helps ensure we get the right help needed. Having this sheet to read
+> from or share with my doctor will help me in my future appointments.
 >
 > - My Spouse
 

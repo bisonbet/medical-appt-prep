@@ -660,8 +660,10 @@ def _about_frontend_html() -> str:
         <p class="eyebrow" id="field-note-title">Field note</p>
         <blockquote>
           I always find it hard to remember what to ask or mention in the middle
-          of an appointment. Having this sheet to read from or share with my doctor
-          really helped me in my last appointment.
+          of an appointment. Helping a parent with appointments can be even more
+          confusing, and this helps ensure we get the right help needed. Having
+          this sheet to read from or share with my doctor will help me in my
+          future appointments.
         </blockquote>
         <p class="quote-attribution">- My Spouse</p>
       </section>
@@ -946,8 +948,10 @@ def create_ui() -> gr.Blocks:
                     <h3>Field note</h3>
                     <blockquote>
                         I always find it hard to remember what to ask or mention in the middle
-                        of an appointment. Having this sheet to read from or share with my doctor
-                        really helped me in my last appointment.
+                        of an appointment. Helping a parent with appointments can be even more
+                        confusing, and this helps ensure we get the right help needed. Having
+                        this sheet to read from or share with my doctor will help me in my
+                        future appointments.
                     </blockquote>
                     <p class="about-meta">- My Spouse</p>
                     <hr />
